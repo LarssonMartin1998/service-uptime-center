@@ -5,10 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
 	"github.com/BurntSushi/toml"
+)
+
+var (
+	ErrCodeInvalidCliArgument = 1
 )
 
 var (
@@ -21,7 +26,8 @@ var (
 )
 
 type cliArgs struct {
-	configPath *string
+	configPath string
+	port       uint16
 }
 
 type service struct {
@@ -41,9 +47,17 @@ type config struct {
 
 func handleCliArgs() cliArgs {
 	var args cliArgs
-	args.configPath = flag.String("config-path", "config.toml", "description")
+	args.configPath = *flag.String("config-path", "config.toml", "description")
+	portFlag := *flag.Uint64("port", 8080, "The port that the HTTP server will listen on")
 
 	flag.Parse()
+
+	if portFlag > math.MaxUint16 {
+		slog.Error("--port flag is too high.", "max value", math.MaxUint16, "got", portFlag)
+		os.Exit(ErrCodeInvalidCliArgument)
+	}
+	args.port = uint16(portFlag)
+
 	return args
 }
 
@@ -109,7 +123,7 @@ func validateConfig(cfg *config) error {
 
 func main() {
 	args := handleCliArgs()
-	_, err := createConfigFromPath(*args.configPath)
+	_, err := createConfigFromPath(args.configPath)
 	if err != nil {
 		slog.Error("failed to parse toml config", "error", err)
 		return
