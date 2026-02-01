@@ -11,13 +11,11 @@ import (
 
 var (
 	mockConfig = `
-# Array of service groups
 [[service_groups]]
 name = "production-group"
 auth_token = "token-for-group-1"
 max_heartbeat_freq = "5m"
 
-  # Nested array of services within this group
   [[service_groups.services]]
   name = "api-server"
 
