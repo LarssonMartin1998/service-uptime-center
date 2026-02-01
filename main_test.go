@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -194,5 +196,84 @@ func TestValidateConfig(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMiddlewareMethods(t *testing.T) {
+	testCases := []struct {
+		method     string
+		middleware Middleware
+		expected   bool
+	}{
+		{
+			http.MethodPost,
+			MiddlewareMethodGet,
+			false,
+		},
+		{
+			http.MethodGet,
+			MiddlewareMethodGet,
+			true,
+		},
+		{
+			http.MethodPut,
+			MiddlewareMethodGet,
+			false,
+		},
+		{
+			http.MethodDelete,
+			MiddlewareMethodGet,
+			false,
+		},
+		{
+			http.MethodPost,
+			MiddlewareMethodPost,
+			true,
+		},
+		{
+			http.MethodGet,
+			MiddlewareMethodPost,
+			false,
+		},
+		{
+			http.MethodPut,
+			MiddlewareMethodPost,
+			false,
+		},
+		{
+			http.MethodDelete,
+			MiddlewareMethodPost,
+			false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(testCase.method, "/test", nil)
+
+		if result := applyMiddleware(w, r, []Middleware{testCase.middleware}); result != testCase.expected {
+			t.Errorf("applyMiddleware unexpected result. Got: %t, Expected: %t", result, testCase.expected)
+			return
+		}
+
+		if testCase.expected {
+			continue
+		}
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("MiddlewareMethod correctly blocked request but did not have code: %d - StatusMethodNotAllowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		allow := w.Header().Get("Allow")
+		if len(allow) == 0 {
+			t.Errorf("MiddlewareMethod correctly blocked request but did not have the Allow header set")
+			return
+		}
+
+		if allow == testCase.method {
+			t.Errorf("MiddlewareMethod correctly blocked request but has the incorrect value set for the Allow header")
+			return
+		}
 	}
 }

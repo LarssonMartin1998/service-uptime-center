@@ -26,6 +26,29 @@ var (
 	ErrInvalidServiceName = errors.New("invalid service name length")
 )
 
+type Middleware func(http.ResponseWriter, *http.Request) bool
+
+func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string) bool {
+	if r.Method != method {
+		w.Header().Set("Allow", method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	return true
+}
+
+var (
+	MiddlewareAuth = func(w http.ResponseWriter, r *http.Request) bool {
+		return true
+	}
+	MiddlewareMethodPost = func(w http.ResponseWriter, r *http.Request) bool {
+		return middlewareMethodCheck(w, r, http.MethodPost)
+	}
+	MiddlewareMethodGet = func(w http.ResponseWriter, r *http.Request) bool {
+		return middlewareMethodCheck(w, r, http.MethodGet)
+	}
+)
+
 type cliArgs struct {
 	configPath string
 	port       uint16
@@ -122,28 +145,52 @@ func validateConfig(cfg *config) error {
 	return nil
 }
 
+func applyMiddleware(w http.ResponseWriter, r *http.Request, middlewares []Middleware) bool {
+	for _, middleware := range middlewares {
+		if !middleware(w, r) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func setupEndpoints() {
+	globalMiddleware := []Middleware{
+		MiddlewareAuth,
+	}
+
 	const base = "/api/v1"
 	endpoints := []struct {
 		pattern    string
+		middleware []Middleware
 		handler    func(http.ResponseWriter, *http.Request)
 	}{
 		{
-			base + "/health",
+			"/health",
+			[]Middleware{
+				MiddlewareMethodGet,
+			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				fmt.Fprint(w, "OK")
 			},
 		},
 		{
-			base + "/status",
+			"/status",
+			[]Middleware{
+				MiddlewareMethodGet,
+			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)
 				fmt.Fprint(w, "Missing implementation")
 			},
 		},
 		{
-			base + "/pulse",
+			"/pulse",
+			[]Middleware{
+				MiddlewareMethodPost,
+			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)
 				fmt.Fprint(w, "Missing implementation")
@@ -152,7 +199,17 @@ func setupEndpoints() {
 	}
 
 	for _, endpoint := range endpoints {
-		http.HandleFunc(endpoint.pattern, endpoint.handler)
+		http.HandleFunc(base+endpoint.pattern, func(w http.ResponseWriter, r *http.Request) {
+			if !applyMiddleware(w, r, globalMiddleware) {
+				return
+			}
+
+			if !applyMiddleware(w, r, endpoint.middleware) {
+				return
+			}
+
+			endpoint.handler(w, r)
+		})
 	}
 }
 
