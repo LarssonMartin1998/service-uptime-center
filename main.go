@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"os"
 	"time"
 
@@ -121,6 +122,40 @@ func validateConfig(cfg *config) error {
 	return nil
 }
 
+func setupEndpoints() {
+	const base = "/api/v1"
+	endpoints := []struct {
+		pattern    string
+		handler    func(http.ResponseWriter, *http.Request)
+	}{
+		{
+			base + "/health",
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, "OK")
+			},
+		},
+		{
+			base + "/status",
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotImplemented)
+				fmt.Fprint(w, "Missing implementation")
+			},
+		},
+		{
+			base + "/pulse",
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotImplemented)
+				fmt.Fprint(w, "Missing implementation")
+			},
+		},
+	}
+
+	for _, endpoint := range endpoints {
+		http.HandleFunc(endpoint.pattern, endpoint.handler)
+	}
+}
+
 func main() {
 	args := handleCliArgs()
 	_, err := createConfigFromPath(args.configPath)
@@ -128,4 +163,9 @@ func main() {
 		slog.Error("failed to parse toml config", "error", err)
 		return
 	}
+
+	setupEndpoints()
+
+	slog.Info("Starting HTTP server", "port", args.port)
+	http.ListenAndServe(fmt.Sprintf(":%d", args.port), nil)
 }
