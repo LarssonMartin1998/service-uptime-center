@@ -77,6 +77,14 @@ var (
 	MiddlewareMethodGet = func(w http.ResponseWriter, r *http.Request) bool {
 		return middlewareMethodCheck(w, r, http.MethodGet)
 	}
+	MiddlewareLogger = func(w http.ResponseWriter, r *http.Request) bool {
+		slog.Info("HTTP Request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"remote_addr", r.RemoteAddr,
+			"user_agent", r.UserAgent())
+		return true
+	}
 )
 
 type cliArgs struct {
@@ -204,6 +212,7 @@ func parsePasswordFile(path string) string {
 
 func setupEndpoints() {
 	globalMiddleware := []Middleware{
+		MiddlewareLogger,
 		MiddlewareAuth,
 	}
 
