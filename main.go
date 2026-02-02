@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	ErrCodeInvalidCliArgument = 1
+	ErrCodeInvalidCliArgument        = 1
+	ErrCodeFailedReadingPasswordFile = 2
 )
 
 var (
@@ -79,8 +80,9 @@ var (
 )
 
 type cliArgs struct {
-	configPath string
+	configPath *string
 	port       uint16
+	pwFilePath *string
 }
 
 type service struct {
@@ -100,9 +102,10 @@ type config struct {
 
 func handleCliArgs() cliArgs {
 	var args cliArgs
-	args.configPath = *flag.String("config-path", "config.toml", "Path to the configuration file, defaults to './config.toml'")
-	portFlag := *flag.Uint64("port", 8080, "The port that the HTTP server will listen on")
+	args.configPath = flag.String("config-path", "config.toml", "Path to the configuration file, defaults to './config.toml'")
+	args.pwFilePath = flag.String("pw-file", "", "Path to the password file, if run without a password file, auth token middleware will be disabled.")
 
+	portFlag := *flag.Uint64("port", 8080, "The port that the HTTP server will listen on")
 	flag.Parse()
 
 	if portFlag > math.MaxUint16 {
@@ -184,6 +187,21 @@ func applyMiddleware(w http.ResponseWriter, r *http.Request, middlewares []Middl
 	return true
 }
 
+func parsePasswordFile(path string) string {
+	if len(path) == 0 {
+		slog.Warn("Running without a password file, this is supported but might not be what you intended to do, see --help for more info")
+		return ""
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		slog.Error("failed to read password file", "path", path, "error", err)
+		os.Exit(ErrCodeFailedReadingPasswordFile)
+	}
+
+	return strings.TrimSpace(string(data))
+}
+
 func setupEndpoints() {
 	globalMiddleware := []Middleware{
 		MiddlewareAuth,
@@ -244,12 +262,13 @@ func setupEndpoints() {
 
 func main() {
 	args := handleCliArgs()
-	_, err := createConfigFromPath(args.configPath)
+	_, err := createConfigFromPath(*args.configPath)
 	if err != nil {
 		slog.Error("failed to parse toml config", "error", err)
 		return
 	}
 
+	context.authToken = parsePasswordFile(*args.pwFilePath)
 	setupEndpoints()
 
 	slog.Info("Starting HTTP server", "port", args.port)
