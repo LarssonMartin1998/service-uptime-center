@@ -38,6 +38,7 @@ type Middleware func(http.ResponseWriter, *http.Request) bool
 
 func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
+		slog.Warn("Middleware BLOCKED request - Invalid Method!", "expected", method, "got", r.Method)
 		w.Header().Set("Allow", method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return false
@@ -47,9 +48,10 @@ func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string
 
 var (
 	MiddlewareAuth = func(w http.ResponseWriter, r *http.Request) bool {
-		writeResponse := func() {
+		writeResponse := func(msg string, code int) {
+			slog.Warn(fmt.Sprintf("Middleware BLOCKED request - %s", msg))
 			w.Header().Set("WWW-Authenticate", "Bearer")
-			w.WriteHeader(http.StatusUnauthorized)
+			http.Error(w, "Unauthorized", code)
 		}
 
 		if len(context.authToken) == 0 {
@@ -57,19 +59,24 @@ var (
 		}
 
 		authHeader := r.Header.Get("Authorization")
+		if len(authHeader) == 0 {
+			writeResponse("Missing Authorization Header!", http.StatusBadRequest)
+			return false
+		}
+
 		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 		if len(authHeader) == len(rawToken) {
-			writeResponse()
+			writeResponse("Invalid Auth Token Format!", http.StatusUnauthorized)
 			return false
 		}
 
 		trimmedToken := strings.TrimSpace(rawToken)
-		if trimmedToken == context.authToken {
-			return true
+		if trimmedToken != context.authToken {
+			writeResponse("Invalid Auth Token!", http.StatusUnauthorized)
+			return false
 		}
 
-		writeResponse()
-		return false
+		return true
 	}
 	MiddlewareMethodPost = func(w http.ResponseWriter, r *http.Request) bool {
 		return middlewareMethodCheck(w, r, http.MethodPost)

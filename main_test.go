@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,6 +62,10 @@ max_heartbeat_freq = "1h"
 		},
 	}
 )
+
+func init() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
 
 func TestConfigCreation(t *testing.T) {
 	cfg, err := createConfig(mockConfig)
