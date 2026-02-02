@@ -206,7 +206,7 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestMiddlewareMethods(t *testing.T) {
-	testCases := []struct {
+	for _, testCase := range []struct {
 		method     string
 		middleware Middleware
 		expected   bool
@@ -251,9 +251,7 @@ func TestMiddlewareMethods(t *testing.T) {
 			MiddlewareMethodPost,
 			false,
 		},
-	}
-
-	for _, testCase := range testCases {
+	} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(testCase.method, "/test", nil)
 
@@ -284,51 +282,66 @@ func TestMiddlewareMethods(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware(t *testing.T) {
+func TestMiddlewareAuth(t *testing.T) {
 	context.authToken = "test-token-123"
 	for _, test := range []struct {
-		header       string
-		requestToken string
-		expected     bool
+		header         string
+		requestToken   string
+		expectedCode   int
+		expectedResult bool
 	}{
 		{
 			"Authorization",
 			"Bearer " + context.authToken,
+			0,
 			true,
 		},
 		{
 			"Authorization",
 			"Bearer     " + context.authToken + "     ",
+			0,
 			true,
 		},
 		{
 			"Authorization",
 			"Bearer     " + context.authToken + "     t",
+			http.StatusUnauthorized,
 			false,
 		},
 		{
 			"Authorization",
 			"Bearer " + "someothertoken",
+			http.StatusUnauthorized,
 			false,
 		},
 		{
 			"Authorization",
 			context.authToken,
+			http.StatusUnauthorized,
 			false,
 		},
 		{
 			"authorization",
 			"Bearer " + context.authToken,
+			0,
 			true,
 		},
 		{
 			"authorization",
 			"bearer " + context.authToken,
+			http.StatusUnauthorized,
 			false,
 		},
 		{
 			"",
 			"",
+			http.StatusBadRequest,
+			false,
+		},
+		{
+			"Authorization",
+			"",
+			http.StatusBadRequest,
 			false,
 		},
 	} {
@@ -336,17 +349,17 @@ func TestAuthMiddleware(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/test", nil)
 		r.Header.Set(test.header, test.requestToken)
 
-		if result := MiddlewareAuth(w, r); result != test.expected {
-			t.Errorf("Expected value mismatch. Got: %t, Expected: %t when passing: header-'%s' value-'%s'", result, test.expected, test.header, test.requestToken)
+		if result := MiddlewareAuth(w, r); result != test.expectedResult {
+			t.Errorf("Expected value mismatch. Got: %t, Expected: %t when passing: header-'%s' value-'%s'", result, test.expectedResult, test.header, test.requestToken)
 			return
 		}
 
-		if test.expected {
+		if test.expectedResult {
 			continue
 		}
 
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Middleware correctly blocked request but with incorrect code. Got: %d, Expected: %d (StatusUnauthorized)", w.Code, http.StatusUnauthorized)
+		if w.Code != test.expectedCode {
+			t.Errorf("Middleware correctly blocked request but with incorrect code. Got: %d, Expected: %d", w.Code, test.expectedCode)
 			return
 		}
 
