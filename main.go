@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"mime"
 	"net/http"
 	"os"
 	"strings"
@@ -43,6 +44,32 @@ func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return false
 	}
+	return true
+}
+
+func middlewareContentTypeCheck(w http.ResponseWriter, r *http.Request, expectedType string) bool {
+	contentTypeHeader := r.Header.Get("Content-Type")
+	writeError := func(msg string, code int) {
+		slog.Warn(fmt.Sprintf("Middleware BLOCKED request - %s", msg), "expected", expectedType, "got", contentTypeHeader)
+		http.Error(w, "Invalid Content-Type", code)
+	}
+
+	if len(contentTypeHeader) == 0 {
+		writeError("Missing Content-Type Header!", http.StatusBadRequest)
+		return false
+	}
+
+	mediaType, _, err := mime.ParseMediaType(contentTypeHeader)
+	if err != nil {
+		writeError("Invalid Content-Type Format", http.StatusBadRequest)
+		return false
+	}
+
+	if mediaType != expectedType {
+		writeError("Unexpected Content-Type", http.StatusUnsupportedMediaType)
+		return false
+	}
+
 	return true
 }
 
@@ -91,6 +118,9 @@ var (
 			"remote_addr", r.RemoteAddr,
 			"user_agent", r.UserAgent())
 		return true
+	}
+	MiddlewareContentTypeJSON = func(w http.ResponseWriter, r *http.Request) bool {
+		return middlewareContentTypeCheck(w, r, "application/json")
 	}
 )
 
@@ -253,6 +283,7 @@ func setupEndpoints() {
 			"/pulse",
 			[]Middleware{
 				MiddlewareMethodPost,
+				MiddlewareContentTypeJSON,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)

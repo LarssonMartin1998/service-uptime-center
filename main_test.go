@@ -390,3 +390,81 @@ func TestMiddlewareAuth(t *testing.T) {
 		return
 	}
 }
+
+func TestMiddlewareContentType(t *testing.T) {
+	for _, test := range []struct {
+		header              string
+		expectedContentType string
+		requestContentType  string
+		code                int
+		expected            bool
+	}{
+		{
+			"Content-Type",
+			"application/json",
+			"application/json",
+			0,
+			true,
+		},
+		{
+			"content-type",
+			"application/json",
+			"application/json",
+			0,
+			true,
+		},
+		{
+			"content-type",
+			"application/json",
+			"   application/json   ; charset=utf-8",
+			0,
+			true,
+		},
+		{
+			"content-type",
+			"application/json",
+			"appLICATion/json",
+			0,
+			true,
+		},
+		{
+			"unsupported header",
+			"application/json",
+			"application/json",
+			http.StatusBadRequest,
+			false,
+		},
+		{
+			"Content-Type",
+			"application/json",
+			"application/zip",
+			http.StatusUnsupportedMediaType,
+			false,
+		},
+		{
+			"",
+			"",
+			"",
+			http.StatusBadRequest,
+			false,
+		},
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/test", nil)
+		r.Header.Set(test.header, test.requestContentType)
+
+		if result := middlewareContentTypeCheck(w, r, test.expectedContentType); result != test.expected {
+			t.Errorf("Expected value mismatch. Got: %t, Expected: %t when passing: header-'%s' value-'%s'", result, test.expected, test.header, test.requestContentType)
+			return
+		}
+
+		if test.expected {
+			continue
+		}
+
+		if w.Code != test.code {
+			t.Errorf("Middleware correctly blocked request but with incorrect code. Got: %d, Expected: %d", w.Code, test.code)
+			return
+		}
+	}
+}
