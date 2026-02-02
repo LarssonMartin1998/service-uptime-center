@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -26,6 +27,12 @@ var (
 	ErrInvalidServiceName = errors.New("invalid service name length")
 )
 
+var context globalContext
+
+type globalContext struct {
+	authToken string
+}
+
 type Middleware func(http.ResponseWriter, *http.Request) bool
 
 func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string) bool {
@@ -39,7 +46,29 @@ func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string
 
 var (
 	MiddlewareAuth = func(w http.ResponseWriter, r *http.Request) bool {
-		return true
+		writeResponse := func() {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+
+		if len(context.authToken) == 0 {
+			return true
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+		if len(authHeader) == len(rawToken) {
+			writeResponse()
+			return false
+		}
+
+		trimmedToken := strings.TrimSpace(rawToken)
+		if trimmedToken == context.authToken {
+			return true
+		}
+
+		writeResponse()
+		return false
 	}
 	MiddlewareMethodPost = func(w http.ResponseWriter, r *http.Request) bool {
 		return middlewareMethodCheck(w, r, http.MethodPost)

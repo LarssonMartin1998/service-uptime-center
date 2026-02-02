@@ -277,3 +277,83 @@ func TestMiddlewareMethods(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthMiddleware(t *testing.T) {
+	context.authToken = "test-token-123"
+	for _, test := range []struct {
+		header       string
+		requestToken string
+		expected     bool
+	}{
+		{
+			"Authorization",
+			"Bearer " + context.authToken,
+			true,
+		},
+		{
+			"Authorization",
+			"Bearer     " + context.authToken + "     ",
+			true,
+		},
+		{
+			"Authorization",
+			"Bearer     " + context.authToken + "     t",
+			false,
+		},
+		{
+			"Authorization",
+			"Bearer " + "someothertoken",
+			false,
+		},
+		{
+			"Authorization",
+			context.authToken,
+			false,
+		},
+		{
+			"authorization",
+			"Bearer " + context.authToken,
+			true,
+		},
+		{
+			"authorization",
+			"bearer " + context.authToken,
+			false,
+		},
+		{
+			"",
+			"",
+			false,
+		},
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/test", nil)
+		r.Header.Set(test.header, test.requestToken)
+
+		if result := MiddlewareAuth(w, r); result != test.expected {
+			t.Errorf("Expected value mismatch. Got: %t, Expected: %t when passing: header-'%s' value-'%s'", result, test.expected, test.header, test.requestToken)
+			return
+		}
+
+		if test.expected {
+			continue
+		}
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("Middleware correctly blocked request but with incorrect code. Got: %d, Expected: %d (StatusUnauthorized)", w.Code, http.StatusUnauthorized)
+			return
+		}
+
+		wwwAuthHeader := w.Header().Get("WWW-Authenticate")
+		if len(wwwAuthHeader) == 0 {
+			t.Errorf("Middleware correctly blocked request but WWW-Authenticate header missing!")
+			return
+		}
+
+		expectedWwwAuthHeader := "Bearer"
+		if wwwAuthHeader != expectedWwwAuthHeader {
+			t.Errorf("Middleware correctly blocked request but WWW-Authenticate header has incorrect value. Got: %s, Expected %s", wwwAuthHeader, expectedWwwAuthHeader)
+			return
+		}
+	}
+}
