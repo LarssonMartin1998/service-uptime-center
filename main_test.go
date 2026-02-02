@@ -356,4 +356,18 @@ func TestAuthMiddleware(t *testing.T) {
 			return
 		}
 	}
+
+	context.authToken = ""
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/test", nil)
+	if !MiddlewareAuth(w, r) {
+		t.Errorf("MiddlewareAuth returned false when context.authToken is not set, this is not expected behavior.")
+		return
+	}
+
+	r.Header.Set("Authorization", "this doesnt matter, should still go through with empty authToken")
+	if !MiddlewareAuth(w, r) {
+		t.Errorf("MiddlewareAuth returned false when context.authToken is not set, this is not expected behavior.")
+		return
+	}
 }
