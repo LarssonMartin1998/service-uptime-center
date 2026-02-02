@@ -110,7 +110,7 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name:        "empty service groups",
 			config:      config{ServiceGroups: []serviceGroup{}},
-			expectError: ErrNoServiceGroups,
+			expectError: errNoServiceGroups,
 		},
 		{
 			name: "service group name too short",
@@ -122,7 +122,7 @@ func TestValidateConfig(t *testing.T) {
 					Services:         baseGroup.Services,
 				},
 			}},
-			expectError: ErrInvalidGroupName,
+			expectError: errInvalidGroupName,
 		},
 		{
 			name: "service group name too long",
@@ -134,7 +134,7 @@ func TestValidateConfig(t *testing.T) {
 					Services:         baseGroup.Services,
 				},
 			}},
-			expectError: ErrInvalidGroupName,
+			expectError: errInvalidGroupName,
 		},
 		{
 			name: "auth token too long",
@@ -146,7 +146,7 @@ func TestValidateConfig(t *testing.T) {
 					Services:         baseGroup.Services,
 				},
 			}},
-			expectError: ErrAuthTokenTooLong,
+			expectError: errAuthTokenTooLong,
 		},
 		{
 			name: "heartbeat frequency too short",
@@ -158,7 +158,7 @@ func TestValidateConfig(t *testing.T) {
 					Services:         baseGroup.Services,
 				},
 			}},
-			expectError: ErrHeartbeatTooShort,
+			expectError: errHeartbeatTooShort,
 		},
 		{
 			name: "no services in group",
@@ -170,7 +170,7 @@ func TestValidateConfig(t *testing.T) {
 					Services:         []service{},
 				},
 			}},
-			expectError: ErrNoServices,
+			expectError: errNoServices,
 		},
 		{
 			name: "service name too short",
@@ -182,7 +182,7 @@ func TestValidateConfig(t *testing.T) {
 					Services:         []service{{Name: "x"}},
 				},
 			}},
-			expectError: ErrInvalidServiceName,
+			expectError: errInvalidServiceName,
 		},
 	}
 
@@ -208,54 +208,54 @@ func TestValidateConfig(t *testing.T) {
 func TestMiddlewareMethods(t *testing.T) {
 	for _, testCase := range []struct {
 		method     string
-		middleware Middleware
+		middleware middleware
 		expected   bool
 	}{
 		{
 			http.MethodPost,
-			MiddlewareMethodGet,
+			middlewareMethodGet,
 			false,
 		},
 		{
 			http.MethodGet,
-			MiddlewareMethodGet,
+			middlewareMethodGet,
 			true,
 		},
 		{
 			http.MethodPut,
-			MiddlewareMethodGet,
+			middlewareMethodGet,
 			false,
 		},
 		{
 			http.MethodDelete,
-			MiddlewareMethodGet,
+			middlewareMethodGet,
 			false,
 		},
 		{
 			http.MethodPost,
-			MiddlewareMethodPost,
+			middlewareMethodPost,
 			true,
 		},
 		{
 			http.MethodGet,
-			MiddlewareMethodPost,
+			middlewareMethodPost,
 			false,
 		},
 		{
 			http.MethodPut,
-			MiddlewareMethodPost,
+			middlewareMethodPost,
 			false,
 		},
 		{
 			http.MethodDelete,
-			MiddlewareMethodPost,
+			middlewareMethodPost,
 			false,
 		},
 	} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(testCase.method, "/test", nil)
 
-		if result := applyMiddleware(w, r, []Middleware{testCase.middleware}); result != testCase.expected {
+		if result := applyMiddleware(w, r, []middleware{testCase.middleware}); result != testCase.expected {
 			t.Errorf("applyMiddleware unexpected result. Got: %t, Expected: %t", result, testCase.expected)
 			return
 		}
@@ -283,7 +283,8 @@ func TestMiddlewareMethods(t *testing.T) {
 }
 
 func TestMiddlewareAuth(t *testing.T) {
-	context.authToken = "test-token-123"
+	authToken := "test-token-123"
+	middlewareAuth := createAuthMiddleware(authToken)
 	for _, test := range []struct {
 		header         string
 		requestToken   string
@@ -292,19 +293,19 @@ func TestMiddlewareAuth(t *testing.T) {
 	}{
 		{
 			"Authorization",
-			"Bearer " + context.authToken,
+			"Bearer " + authToken,
 			0,
 			true,
 		},
 		{
 			"Authorization",
-			"Bearer     " + context.authToken + "     ",
+			"Bearer     " + authToken + "     ",
 			0,
 			true,
 		},
 		{
 			"Authorization",
-			"Bearer     " + context.authToken + "     t",
+			"Bearer     " + authToken + "     t",
 			http.StatusUnauthorized,
 			false,
 		},
@@ -316,19 +317,19 @@ func TestMiddlewareAuth(t *testing.T) {
 		},
 		{
 			"Authorization",
-			context.authToken,
+			authToken,
 			http.StatusUnauthorized,
 			false,
 		},
 		{
 			"authorization",
-			"Bearer " + context.authToken,
+			"Bearer " + authToken,
 			0,
 			true,
 		},
 		{
 			"authorization",
-			"bearer " + context.authToken,
+			"bearer " + authToken,
 			http.StatusUnauthorized,
 			false,
 		},
@@ -349,7 +350,7 @@ func TestMiddlewareAuth(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/test", nil)
 		r.Header.Set(test.header, test.requestToken)
 
-		if result := MiddlewareAuth(w, r); result != test.expectedResult {
+		if result := middlewareAuth(w, r); result != test.expectedResult {
 			t.Errorf("Expected value mismatch. Got: %t, Expected: %t when passing: header-'%s' value-'%s'", result, test.expectedResult, test.header, test.requestToken)
 			return
 		}
@@ -376,17 +377,17 @@ func TestMiddlewareAuth(t *testing.T) {
 		}
 	}
 
-	context.authToken = ""
+	disabledMiddlewareAuth := createAuthMiddleware("")
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/test", nil)
-	if !MiddlewareAuth(w, r) {
-		t.Errorf("MiddlewareAuth returned false when context.authToken is not set, this is not expected behavior.")
+	if !disabledMiddlewareAuth(w, r) {
+		t.Errorf("MiddlewareAuth returned false when authToken is not set, this is not expected behavior.")
 		return
 	}
 
 	r.Header.Set("Authorization", "this doesnt matter, should still go through with empty authToken")
-	if !MiddlewareAuth(w, r) {
-		t.Errorf("MiddlewareAuth returned false when context.authToken is not set, this is not expected behavior.")
+	if !disabledMiddlewareAuth(w, r) {
+		t.Errorf("MiddlewareAuth returned false when authToken is not set, this is not expected behavior.")
 		return
 	}
 }

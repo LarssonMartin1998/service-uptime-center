@@ -16,26 +16,20 @@ import (
 )
 
 var (
-	ErrCodeInvalidCliArgument        = 1
-	ErrCodeFailedReadingPasswordFile = 2
+	errCodeInvalidCliArgument        = 1
+	errCodeFailedReadingPasswordFile = 2
 )
 
 var (
-	ErrNoServiceGroups    = errors.New("config doesn't contain any service groups, this is not allowed")
-	ErrInvalidGroupName   = errors.New("invalid service group name length")
-	ErrAuthTokenTooLong   = errors.New("auth token too long")
-	ErrHeartbeatTooShort  = errors.New("heartbeat frequency too short")
-	ErrNoServices         = errors.New("service group has no services")
-	ErrInvalidServiceName = errors.New("invalid service name length")
+	errNoServiceGroups    = errors.New("config doesn't contain any service groups, this is not allowed")
+	errInvalidGroupName   = errors.New("invalid service group name length")
+	errAuthTokenTooLong   = errors.New("auth token too long")
+	errHeartbeatTooShort  = errors.New("heartbeat frequency too short")
+	errNoServices         = errors.New("service group has no services")
+	errInvalidServiceName = errors.New("invalid service name length")
 )
 
-var context globalContext
-
-type globalContext struct {
-	authToken string
-}
-
-type Middleware func(http.ResponseWriter, *http.Request) bool
+type middleware func(http.ResponseWriter, *http.Request) bool
 
 func middlewareMethodCheck(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
@@ -73,15 +67,15 @@ func middlewareContentTypeCheck(w http.ResponseWriter, r *http.Request, expected
 	return true
 }
 
-var (
-	MiddlewareAuth = func(w http.ResponseWriter, r *http.Request) bool {
+func createAuthMiddleware(authToken string) middleware {
+	return func(w http.ResponseWriter, r *http.Request) bool {
 		writeResponse := func(msg string, code int) {
 			slog.Warn(fmt.Sprintf("Middleware BLOCKED request - %s", msg))
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			http.Error(w, "Unauthorized", code)
 		}
 
-		if len(context.authToken) == 0 {
+		if len(authToken) == 0 {
 			return true
 		}
 
@@ -98,20 +92,23 @@ var (
 		}
 
 		trimmedToken := strings.TrimSpace(rawToken)
-		if trimmedToken != context.authToken {
+		if trimmedToken != authToken {
 			writeResponse("Invalid Auth Token!", http.StatusUnauthorized)
 			return false
 		}
 
 		return true
 	}
-	MiddlewareMethodPost = func(w http.ResponseWriter, r *http.Request) bool {
+}
+
+var (
+	middlewareMethodPost = func(w http.ResponseWriter, r *http.Request) bool {
 		return middlewareMethodCheck(w, r, http.MethodPost)
 	}
-	MiddlewareMethodGet = func(w http.ResponseWriter, r *http.Request) bool {
+	middlewareMethodGet = func(w http.ResponseWriter, r *http.Request) bool {
 		return middlewareMethodCheck(w, r, http.MethodGet)
 	}
-	MiddlewareLogger = func(w http.ResponseWriter, r *http.Request) bool {
+	middlewareLogger = func(w http.ResponseWriter, r *http.Request) bool {
 		slog.Info("HTTP Request",
 			"method", r.Method,
 			"path", r.URL.Path,
@@ -119,7 +116,7 @@ var (
 			"user_agent", r.UserAgent())
 		return true
 	}
-	MiddlewareContentTypeJSON = func(w http.ResponseWriter, r *http.Request) bool {
+	middlewareContentTypeJSON = func(w http.ResponseWriter, r *http.Request) bool {
 		return middlewareContentTypeCheck(w, r, "application/json")
 	}
 )
@@ -155,7 +152,7 @@ func handleCliArgs() cliArgs {
 
 	if portFlag > math.MaxUint16 {
 		slog.Error("--port flag is too high.", "max value", math.MaxUint16, "got", portFlag)
-		os.Exit(ErrCodeInvalidCliArgument)
+		os.Exit(errCodeInvalidCliArgument)
 	}
 	args.port = uint16(portFlag)
 
@@ -188,33 +185,33 @@ func createConfig(data string) (config, error) {
 
 func validateConfig(cfg *config) error {
 	if len(cfg.ServiceGroups) == 0 {
-		return ErrNoServiceGroups
+		return errNoServiceGroups
 	}
 
 	for _, grp := range cfg.ServiceGroups {
 		const MinNameLen = 2
 		const MaxNameLen = 64
 		if len(grp.Name) < MinNameLen || len(grp.Name) > MaxNameLen {
-			return fmt.Errorf("%w (min: %d, max: %d): %s", ErrInvalidGroupName, MinNameLen, MaxNameLen, grp.Name)
+			return fmt.Errorf("%w (min: %d, max: %d): %s", errInvalidGroupName, MinNameLen, MaxNameLen, grp.Name)
 		}
 
 		const MaxAuthLen = 255
 		if len(grp.AuthToken) > MaxAuthLen {
-			return fmt.Errorf("%w (max: %d): %s", ErrAuthTokenTooLong, MaxAuthLen, grp.AuthToken)
+			return fmt.Errorf("%w (max: %d): %s", errAuthTokenTooLong, MaxAuthLen, grp.AuthToken)
 		}
 
 		const MinHeartbeatFreq = time.Second * 60
 		if grp.MaxHeartbeatFreq < MinHeartbeatFreq {
-			return fmt.Errorf("%w (min: %v): %v", ErrHeartbeatTooShort, MinHeartbeatFreq, grp.MaxHeartbeatFreq)
+			return fmt.Errorf("%w (min: %v): %v", errHeartbeatTooShort, MinHeartbeatFreq, grp.MaxHeartbeatFreq)
 		}
 
 		if len(grp.Services) == 0 {
-			return fmt.Errorf("%w: %s", ErrNoServices, grp.Name)
+			return fmt.Errorf("%w: %s", errNoServices, grp.Name)
 		}
 
 		for _, service := range grp.Services {
 			if len(service.Name) < MinNameLen || len(service.Name) > MaxNameLen {
-				return fmt.Errorf("%w (min: %d, max: %d): %s", ErrInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
+				return fmt.Errorf("%w (min: %d, max: %d): %s", errInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
 			}
 		}
 	}
@@ -222,7 +219,7 @@ func validateConfig(cfg *config) error {
 	return nil
 }
 
-func applyMiddleware(w http.ResponseWriter, r *http.Request, middlewares []Middleware) bool {
+func applyMiddleware(w http.ResponseWriter, r *http.Request, middlewares []middleware) bool {
 	for _, middleware := range middlewares {
 		if !middleware(w, r) {
 			return false
@@ -241,28 +238,28 @@ func parsePasswordFile(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		slog.Error("failed to read password file", "path", path, "error", err)
-		os.Exit(ErrCodeFailedReadingPasswordFile)
+		os.Exit(errCodeFailedReadingPasswordFile)
 	}
 
 	return strings.TrimSpace(string(data))
 }
 
-func setupEndpoints() {
-	globalMiddleware := []Middleware{
-		MiddlewareLogger,
-		MiddlewareAuth,
+func setupEndpoints(authToken string) {
+	globalMiddleware := []middleware{
+		middlewareLogger,
+		createAuthMiddleware(authToken),
 	}
 
 	const base = "/api/v1"
 	endpoints := []struct {
 		pattern    string
-		middleware []Middleware
+		middleware []middleware
 		handler    func(http.ResponseWriter, *http.Request)
 	}{
 		{
 			"/health",
-			[]Middleware{
-				MiddlewareMethodGet,
+			[]middleware{
+				middlewareMethodGet,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
@@ -271,8 +268,8 @@ func setupEndpoints() {
 		},
 		{
 			"/status",
-			[]Middleware{
-				MiddlewareMethodGet,
+			[]middleware{
+				middlewareMethodGet,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)
@@ -281,9 +278,9 @@ func setupEndpoints() {
 		},
 		{
 			"/pulse",
-			[]Middleware{
-				MiddlewareMethodPost,
-				MiddlewareContentTypeJSON,
+			[]middleware{
+				middlewareMethodPost,
+				middlewareContentTypeJSON,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)
@@ -315,8 +312,7 @@ func main() {
 		return
 	}
 
-	context.authToken = parsePasswordFile(*args.pwFilePath)
-	setupEndpoints()
+	setupEndpoints(parsePasswordFile(*args.pwFilePath))
 
 	slog.Info("Starting HTTP server", "port", args.port)
 	http.ListenAndServe(fmt.Sprintf(":%d", args.port), nil)
