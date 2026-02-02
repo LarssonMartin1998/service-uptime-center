@@ -100,7 +100,7 @@ type config struct {
 
 func handleCliArgs() cliArgs {
 	var args cliArgs
-	args.configPath = *flag.String("config-path", "config.toml", "description")
+	args.configPath = *flag.String("config-path", "config.toml", "Path to the configuration file, defaults to './config.toml'")
 	portFlag := *flag.Uint64("port", 8080, "The port that the HTTP server will listen on")
 
 	flag.Parse()
