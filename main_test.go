@@ -35,12 +35,12 @@ max_heartbeat_freq = "1h"
   name = "cache-server"
 `
 	expectedResult = config{
-		ServiceGroups: []serviceGroup{
+		ServiceGroups: []serviceGroupCfg{
 			{
 				Name:             "production-group",
 				AuthToken:        "token-for-group-1",
 				MaxHeartbeatFreq: time.Minute * 5,
-				Services: []service{
+				Services: []serviceCfg{
 					{
 						Name: "api-server",
 					},
@@ -53,7 +53,7 @@ max_heartbeat_freq = "1h"
 				Name:             "staging-group",
 				AuthToken:        "token-for-group-2",
 				MaxHeartbeatFreq: time.Hour * 1,
-				Services: []service{
+				Services: []serviceCfg{
 					{
 						Name: "cache-server",
 					},
@@ -91,11 +91,11 @@ func TestValidateConfig(t *testing.T) {
 		}
 	})
 
-	baseGroup := serviceGroup{
+	baseGroup := serviceGroupCfg{
 		Name:             "test-group",
 		AuthToken:        "valid-token",
 		MaxHeartbeatFreq: time.Minute * 2,
-		Services:         []service{{Name: "test-service"}},
+		Services:         []serviceCfg{{Name: "test-service"}},
 	}
 
 	tests := []struct {
@@ -105,16 +105,16 @@ func TestValidateConfig(t *testing.T) {
 	}{
 		{
 			name:   "valid config",
-			config: config{ServiceGroups: []serviceGroup{baseGroup}},
+			config: config{ServiceGroups: []serviceGroupCfg{baseGroup}},
 		},
 		{
 			name:        "empty service groups",
-			config:      config{ServiceGroups: []serviceGroup{}},
+			config:      config{ServiceGroups: []serviceGroupCfg{}},
 			expectError: errNoServiceGroups,
 		},
 		{
 			name: "service group name too short",
-			config: config{ServiceGroups: []serviceGroup{
+			config: config{ServiceGroups: []serviceGroupCfg{
 				{
 					Name:             "a",
 					AuthToken:        baseGroup.AuthToken,
@@ -126,7 +126,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "service group name too long",
-			config: config{ServiceGroups: []serviceGroup{
+			config: config{ServiceGroups: []serviceGroupCfg{
 				{
 					Name:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 					AuthToken:        baseGroup.AuthToken,
@@ -138,7 +138,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "auth token too long",
-			config: config{ServiceGroups: []serviceGroup{
+			config: config{ServiceGroups: []serviceGroupCfg{
 				{
 					Name:             baseGroup.Name,
 					AuthToken:        strings.Repeat("a", 256),
@@ -150,7 +150,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "heartbeat frequency too short",
-			config: config{ServiceGroups: []serviceGroup{
+			config: config{ServiceGroups: []serviceGroupCfg{
 				{
 					Name:             baseGroup.Name,
 					AuthToken:        baseGroup.AuthToken,
@@ -162,24 +162,24 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "no services in group",
-			config: config{ServiceGroups: []serviceGroup{
+			config: config{ServiceGroups: []serviceGroupCfg{
 				{
 					Name:             baseGroup.Name,
 					AuthToken:        baseGroup.AuthToken,
 					MaxHeartbeatFreq: baseGroup.MaxHeartbeatFreq,
-					Services:         []service{},
+					Services:         []serviceCfg{},
 				},
 			}},
 			expectError: errNoServices,
 		},
 		{
 			name: "service name too short",
-			config: config{ServiceGroups: []serviceGroup{
+			config: config{ServiceGroups: []serviceGroupCfg{
 				{
 					Name:             baseGroup.Name,
 					AuthToken:        baseGroup.AuthToken,
 					MaxHeartbeatFreq: baseGroup.MaxHeartbeatFreq,
-					Services:         []service{{Name: "x"}},
+					Services:         []serviceCfg{{Name: "x"}},
 				},
 			}},
 			expectError: errInvalidServiceName,

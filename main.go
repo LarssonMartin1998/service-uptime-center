@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,7 +18,8 @@ import (
 
 var (
 	errCodeInvalidCliArgument        = 1
-	errCodeFailedReadingPasswordFile = 2
+	errCodeInvalidConfig             = 2
+	errCodeFailedReadingPasswordFile = 3
 )
 
 var (
@@ -127,19 +129,37 @@ type cliArgs struct {
 	pwFilePath *string
 }
 
-type service struct {
+type serviceCfg struct {
 	Name string `toml:"name"`
 }
 
-type serviceGroup struct {
+type serviceGroupCfg struct {
 	Name             string        `toml:"name"`
-	Services         []service     `toml:"services"`
+	Services         []serviceCfg  `toml:"services"`
 	AuthToken        string        `toml:"auth_token"`
 	MaxHeartbeatFreq time.Duration `toml:"max_heartbeat_freq"`
 }
 
 type config struct {
-	ServiceGroups []serviceGroup `toml:"service_groups"`
+	ServiceGroups []serviceGroupCfg `toml:"service_groups"`
+}
+
+type pulseRequestBody struct {
+	ServiceName string `json:"service_name"`
+}
+
+type service struct {
+	lastPulse time.Time
+}
+
+type serviceContext struct {
+	service    *service
+	serviceCfg *serviceCfg
+}
+
+type contextProvider struct {
+	cfg        config
+	serviceCtx map[string]serviceContext
 }
 
 func handleCliArgs() cliArgs {
@@ -229,22 +249,25 @@ func applyMiddleware(w http.ResponseWriter, r *http.Request, middlewares []middl
 	return true
 }
 
-func parsePasswordFile(path string) string {
+func parsePasswordFile(path string) (string, error) {
 	if len(path) == 0 {
 		slog.Warn("Running without a password file, this is supported but might not be what you intended to do, see --help for more info")
-		return ""
+		return "", nil
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		slog.Error("failed to read password file", "path", path, "error", err)
-		os.Exit(errCodeFailedReadingPasswordFile)
+		return "", err
 	}
 
-	return strings.TrimSpace(string(data))
+	return strings.TrimSpace(string(data)), nil
 }
 
-func setupEndpoints(authToken string) {
+func setupEndpoints(authToken string, ctx *contextProvider) {
+	if ctx == nil {
+		panic("contextProvider cannot be passed as nil")
+	}
+
 	globalMiddleware := []middleware{
 		middlewareLogger,
 		createAuthMiddleware(authToken),
@@ -283,8 +306,25 @@ func setupEndpoints(authToken string) {
 				middlewareContentTypeJSON,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusNotImplemented)
-				fmt.Fprint(w, "Missing implementation")
+				var body pulseRequestBody
+				decoder := json.NewDecoder(r.Body)
+				decoder.DisallowUnknownFields()
+				if err := decoder.Decode(&body); err != nil {
+					slog.Warn("Failed to decode json from request body", "endpoint", "/pulse", "body", r.Body, "error", err)
+					http.Error(w, "Invalid JSON in Request", http.StatusBadRequest)
+					return
+				}
+
+				if _, ok := ctx.serviceCtx[body.ServiceName]; !ok {
+					slog.Warn("ServiceName doesn't exist in serviceMapper", "endpoint", "/pulse", "body", r.Body)
+					http.Error(w, "Invalid Service Name", http.StatusBadRequest)
+					return
+				}
+
+				ctx.serviceCtx[body.ServiceName].service.lastPulse = time.Now()
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "Service '%s' pulsed successfully", body.ServiceName)
+				slog.Info("Pulse request successfully executed.", "service", body.ServiceName)
 			},
 		},
 	}
@@ -304,15 +344,54 @@ func setupEndpoints(authToken string) {
 	}
 }
 
-func main() {
-	args := handleCliArgs()
-	_, err := createConfigFromPath(*args.configPath)
-	if err != nil {
-		slog.Error("failed to parse toml config", "error", err)
-		return
+func createServiceContext(ctx *contextProvider) (map[string]serviceContext, error) {
+	if ctx == nil {
+		panic("contextProvider cannot be passed as nil")
 	}
 
-	setupEndpoints(parsePasswordFile(*args.pwFilePath))
+	now := time.Now()
+	serviceCtx := make(map[string]serviceContext)
+	for _, group := range ctx.cfg.ServiceGroups {
+		for _, serviceCfg := range group.Services {
+			_, ok := serviceCtx[serviceCfg.Name]
+			if ok {
+				return nil, fmt.Errorf("service with this name already exist '%s', all service names must be unique", serviceCfg.Name)
+			}
+
+			serviceCtx[serviceCfg.Name] = serviceContext{
+				service: &service{
+					lastPulse: now,
+				},
+				serviceCfg: &serviceCfg,
+			}
+		}
+	}
+
+	return serviceCtx, nil
+}
+
+func main() {
+	args := handleCliArgs()
+
+	var err error
+	contextProvider := contextProvider{}
+	if contextProvider.cfg, err = createConfigFromPath(*args.configPath); err != nil {
+		slog.Error("failed to parse toml config", "error", err)
+		os.Exit(errCodeInvalidConfig)
+	}
+
+	contextProvider.serviceCtx, err = createServiceContext(&contextProvider)
+	if err != nil {
+		slog.Error("failed to create service mapper from config", "error", err)
+		os.Exit(errCodeInvalidConfig)
+	}
+
+	if pw, err := parsePasswordFile(*args.pwFilePath); err != nil {
+		slog.Error("failed to read password file", "path", *args.pwFilePath, "error", err)
+		os.Exit(errCodeFailedReadingPasswordFile)
+	} else {
+		setupEndpoints(pw, &contextProvider)
+	}
 
 	slog.Info("Starting HTTP server", "port", args.port)
 	http.ListenAndServe(fmt.Sprintf(":%d", args.port), nil)
