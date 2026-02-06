@@ -10,7 +10,9 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -393,6 +395,15 @@ func main() {
 		setupEndpoints(pw, &contextProvider)
 	}
 
-	slog.Info("Starting HTTP server", "port", args.port)
-	http.ListenAndServe(fmt.Sprintf(":%d", args.port), nil)
+	server := http.Server{Addr: fmt.Sprintf(":%d", args.port)}
+	go func() {
+		slog.Info("Starting HTTP server", "port", args.port)
+		server.ListenAndServe()
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	server.Close()
 }
