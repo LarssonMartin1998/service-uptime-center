@@ -126,9 +126,10 @@ var (
 )
 
 type cliArgs struct {
-	configPath *string
-	port       uint16
-	pwFilePath *string
+	configPath    *string
+	port          uint16
+	pwFilePath    *string
+	sleepDuration time.Duration
 }
 
 type serviceCfg struct {
@@ -160,14 +161,16 @@ type serviceContext struct {
 }
 
 type contextProvider struct {
-	cfg        config
-	serviceCtx map[string]serviceContext
+	cfg           config
+	serviceCtx    map[string]serviceContext
+	sleepDuration time.Duration
 }
 
 func handleCliArgs() cliArgs {
 	var args cliArgs
 	args.configPath = flag.String("config-path", "config.toml", "Path to the configuration file, defaults to './config.toml'")
 	args.pwFilePath = flag.String("pw-file", "", "Path to the password file, if run without a password file, auth token middleware will be disabled.")
+	sleepDurationStr := flag.String("sleep-duration", "3h", "How frequently to check for missing pulses from services.")
 
 	portFlag := *flag.Uint64("port", 8080, "The port that the HTTP server will listen on")
 	flag.Parse()
@@ -176,6 +179,14 @@ func handleCliArgs() cliArgs {
 		slog.Error("--port flag is too high.", "max value", math.MaxUint16, "got", portFlag)
 		os.Exit(errCodeInvalidCliArgument)
 	}
+
+	if duration, err := time.ParseDuration(*sleepDurationStr); err != nil {
+		slog.Error("--sleep-duration has invalid format (supported format: ns, us, ms, s, m, h)")
+		os.Exit(errCodeInvalidCliArgument)
+	} else {
+		args.sleepDuration = duration
+	}
+
 	args.port = uint16(portFlag)
 
 	return args
