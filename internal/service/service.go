@@ -5,12 +5,9 @@ import "time"
 
 type Mapper map[string]*Service
 
-type Group struct {
-	Services         []Service     `toml:"services"`
-	MaxHeartbeatFreq time.Duration `toml:"max_heartbeat_freq"`
-}
-
 type Service struct {
-	Name      string `toml:"name"`
-	LastPulse time.Time
+	Name                     string        `toml:"name"`
+	HeartbeatTimeoutDuration time.Duration `toml:"heartbeat_timeout_duration"`
+	LastPulse                time.Time
+}
 }

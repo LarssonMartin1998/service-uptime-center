@@ -35,23 +35,21 @@ func parsePasswordFile(path string) (string, error) {
 	return pw, nil
 }
 
-func createServiceMapper(groups []service.Group) (service.Mapper, error) {
-	if groups == nil {
-		panic("groups cannot be passed as nil")
+func createServiceMapper(services []service.Service) (service.Mapper, error) {
+	if services == nil {
+		panic("services cannot be passed as nil")
 	}
 
 	now := time.Now()
 	serviceMapper := make(map[string]*service.Service)
-	for _, group := range groups {
-		for _, service := range group.Services {
-			_, ok := serviceMapper[service.Name]
-			if ok {
-				return nil, fmt.Errorf("service with this name already exist '%s', all service names must be unique", service.Name)
-			}
-
-			serviceMapper[service.Name] = &service
-			service.LastPulse = now
+	for _, service := range services {
+		_, ok := serviceMapper[service.Name]
+		if ok {
+			return nil, fmt.Errorf("service with this name already exist '%s', all service names must be unique", service.Name)
 		}
+
+		serviceMapper[service.Name] = &service
+		service.LastPulse = now
 	}
 
 	return serviceMapper, nil
@@ -70,7 +68,7 @@ func main() {
 		slog.Error("failed to read password file", "path", args.PwFilePath, "error", err)
 		os.Exit(apperrors.CodeFailedReadingPasswordFile)
 	} else {
-		serviceMapper, err := createServiceMapper(cfg.ServiceGroups)
+		serviceMapper, err := createServiceMapper(cfg.Services)
 		if err != nil {
 			slog.Error("failed to create service mapper from config", "error", err)
 			os.Exit(apperrors.CodeInvalidConfig)

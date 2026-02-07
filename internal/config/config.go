@@ -12,8 +12,8 @@ import (
 )
 
 type TomlConfig struct {
-	SleepDuration time.Duration   `toml:"sleep_duration"`
-	ServiceGroups []service.Group `toml:"service_groups"`
+	IncidentsPollFreq time.Duration     `toml:"incident_poll_frequency"`
+	Services          []service.Service `toml:"services"`
 }
 
 func TomlStringDecoder(data string) (*TomlConfig, error) {
@@ -44,26 +44,20 @@ func Parse(decodeToml TomlDecoder, value string) (*TomlConfig, error) {
 }
 
 func (cfg *TomlConfig) Validate() error {
-	if len(cfg.ServiceGroups) == 0 {
-		return apperrors.ErrNoServiceGroups
+	if len(cfg.Services) == 0 {
+		return fmt.Errorf("%w", apperrors.ErrNoServices)
 	}
 
-	for _, grp := range cfg.ServiceGroups {
+	for _, service := range cfg.Services {
 		const MinHeartbeatFreq = time.Second * 60
-		if grp.MaxHeartbeatFreq < MinHeartbeatFreq {
-			return fmt.Errorf("%w (min: %v): %v", apperrors.ErrHeartbeatTooShort, MinHeartbeatFreq, grp.MaxHeartbeatFreq)
-		}
-
-		if len(grp.Services) == 0 {
-			return fmt.Errorf("%w", apperrors.ErrNoServices)
+		if service.HeartbeatTimeoutDuration < MinHeartbeatFreq {
+			return fmt.Errorf("%w (min: %v): %v", apperrors.ErrHeartbeatTimeoutTooShort, MinHeartbeatFreq, service.HeartbeatTimeoutDuration)
 		}
 
 		const MinNameLen = 2
 		const MaxNameLen = 64
-		for _, service := range grp.Services {
-			if len(service.Name) < MinNameLen || len(service.Name) > MaxNameLen {
-				return fmt.Errorf("%w (min: %d, max: %d): %s", apperrors.ErrInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
-			}
+		if len(service.Name) < MinNameLen || len(service.Name) > MaxNameLen {
+			return fmt.Errorf("%w (min: %d, max: %d): %s", apperrors.ErrInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
 		}
 	}
 

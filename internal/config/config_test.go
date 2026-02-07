@@ -13,44 +13,34 @@ import (
 
 var (
 	mockConfig = `
-sleep_duration = "3s"
+incident_poll_frequency = "3s"
 
-[[service_groups]]
-max_heartbeat_freq = "5m"
+[[services]]
+name = "api-server"
+heartbeat_timeout_duration = "90s"
 
-  [[service_groups.services]]
-  name = "api-server"
+[[services]]
+name = "database"
+heartbeat_timeout_duration = "5m"
 
-  [[service_groups.services]]
-  name = "database"
-
-[[service_groups]]
-max_heartbeat_freq = "1h"
-
-  [[service_groups.services]]
-  name = "cache-server"
+[[services]]
+heartbeat_timeout_duration = "1h"
+name = "cache-server"
 `
 	expectedResult = TomlConfig{
-		SleepDuration: time.Second * 3,
-		ServiceGroups: []service.Group{
+		IncidentsPollFreq: time.Second * 3,
+		Services: []service.Service{
 			{
-				MaxHeartbeatFreq: time.Minute * 5,
-				Services: []service.Service{
-					{
-						Name: "api-server",
-					},
-					{
-						Name: "database",
-					},
-				},
+				Name:                     "api-server",
+				HeartbeatTimeoutDuration: time.Second * 90,
 			},
 			{
-				MaxHeartbeatFreq: time.Hour * 1,
-				Services: []service.Service{
-					{
-						Name: "cache-server",
-					},
-				},
+				Name:                     "database",
+				HeartbeatTimeoutDuration: time.Minute * 5,
+			},
+			{
+				Name:                     "cache-server",
+				HeartbeatTimeoutDuration: time.Hour * 1,
 			},
 		},
 	}
@@ -75,53 +65,38 @@ func TestValidateConfig(t *testing.T) {
 		}
 	})
 
-	baseGroup := service.Group{
-		MaxHeartbeatFreq: time.Minute * 2,
-		Services:         []service.Service{{Name: "test-service"}},
-	}
-
 	tests := []struct {
 		name        string
 		config      TomlConfig
 		expectError error
 	}{
 		{
-			name:   "valid config",
-			config: TomlConfig{ServiceGroups: []service.Group{baseGroup}},
-		},
-		{
-			name:        "empty service groups",
-			config:      TomlConfig{ServiceGroups: []service.Group{}},
-			expectError: apperror.ErrNoServiceGroups,
-		},
-		{
-			name: "heartbeat frequency too short",
-			config: TomlConfig{ServiceGroups: []service.Group{
-				{
-					MaxHeartbeatFreq: time.Second * 30,
-					Services:         baseGroup.Services,
-				},
-			}},
-			expectError: apperror.ErrHeartbeatTooShort,
-		},
-		{
-			name: "no services in group",
-			config: TomlConfig{ServiceGroups: []service.Group{
-				{
-					MaxHeartbeatFreq: baseGroup.MaxHeartbeatFreq,
-					Services:         []service.Service{},
-				},
-			}},
+			name:        "empty services",
+			config:      TomlConfig{IncidentsPollFreq: time.Hour * 2, Services: nil},
 			expectError: apperror.ErrNoServices,
 		},
 		{
-			name: "service name too short",
-			config: TomlConfig{ServiceGroups: []service.Group{
-				{
-					MaxHeartbeatFreq: baseGroup.MaxHeartbeatFreq,
-					Services:         []service.Service{{Name: "x"}},
+			name: "heartbeat timeout duration too short",
+			config: TomlConfig{
+				Services: []service.Service{
+					{
+						HeartbeatTimeoutDuration: time.Second * 30,
+						Name:                     "test-service-1",
+					},
 				},
-			}},
+			},
+			expectError: apperror.ErrHeartbeatTimeoutTooShort,
+		},
+		{
+			name: "service name too short",
+			config: TomlConfig{
+				Services: []service.Service{
+					{
+						HeartbeatTimeoutDuration: time.Hour * 30,
+						Name:                     "x",
+					},
+				},
+			},
 			expectError: apperror.ErrInvalidServiceName,
 		},
 	}
