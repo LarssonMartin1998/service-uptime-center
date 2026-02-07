@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	service "service-uptime-center/internal/service"
 	mw "service-uptime-center/middleware"
@@ -29,9 +28,9 @@ func ServeAndAwaitTermination(port uint16) {
 	server.Close()
 }
 
-func SetupEndpoints(authToken string, mapper service.Mapper) {
-	if mapper == nil {
-		panic("mapper cannot be passed as nil")
+func SetupEndpoints(authToken string, manager *service.Manager) {
+	if manager == nil {
+		panic("manager cannot be passed as nil")
 	}
 
 	globalMiddleware := []mw.Middleware{
@@ -81,13 +80,12 @@ func SetupEndpoints(authToken string, mapper service.Mapper) {
 					return
 				}
 
-				if _, ok := mapper[body.ServiceName]; !ok {
+				if !manager.UpdatePulse(body.ServiceName) {
 					slog.Warn("ServiceName doesn't exist in Mapper", "endpoint", "/pulse", "body", r.Body)
 					http.Error(w, "Invalid Service Name", http.StatusBadRequest)
 					return
 				}
 
-				mapper[body.ServiceName].LastPulse = time.Now()
 				w.WriteHeader(http.StatusOK)
 				fmt.Fprintf(w, "Service '%s' pulsed successfully", body.ServiceName)
 				slog.Info("Pulse request successfully executed.", "service", body.ServiceName)
