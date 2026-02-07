@@ -28,7 +28,7 @@
 
           doCheck = true;
           checkPhase = ''
-            go test
+            go test ./...
           '';
         };
 
