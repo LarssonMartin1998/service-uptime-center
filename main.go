@@ -40,7 +40,7 @@ func parsePasswordFile(path string) (string, error) {
 func main() {
 	args := cli.ParseArgs()
 
-	cfg, err := config.Parse(config.TomlFileDecoder, args.ConfigPath)
+	cfg, err := config.Parse(config.TomlFileDecoder[*service.Config], args.ConfigPath)
 	if err != nil {
 		slog.Error("failed to parse toml config", "error", err)
 		os.Exit(apperrors.CodeInvalidConfig)
@@ -50,14 +50,14 @@ func main() {
 		slog.Error("failed to read password file", "path", args.PwFilePath, "error", err)
 		os.Exit(apperrors.CodeFailedReadingPasswordFile)
 	} else {
-		serviceManager, err := service.NewManager(cfg.Services)
+		serviceManager, err := service.NewManager(cfg)
 		if err != nil {
 			slog.Error("failed to create service mapper from config", "error", err)
 			os.Exit(apperrors.CodeInvalidConfig)
 		}
 
 		server.SetupEndpoints(pw, serviceManager)
-		serviceManager.StartMonitoring(cfg.IncidentsPollFreq)
+		serviceManager.StartMonitoring()
 	}
 
 	server.ServeAndAwaitTermination(args.Port)

@@ -10,4 +10,6 @@ var (
 	ErrHeartbeatTimeoutTooShort = errors.New("heartbeat timeout duration too short")
 	ErrInvalidServiceName       = errors.New("invalid service name length")
 	ErrDuplicateServiceNames    = errors.New("duplicate server names detected, not allowed")
+	ErrNoNotifiers              = errors.New("service is missing notifiers, not allowed")
+	ErrInvalidNotifProtocol     = errors.New("notification protocol doesn't exist")
 )

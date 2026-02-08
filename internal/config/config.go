@@ -2,64 +2,38 @@
 package config
 
 import (
-	"fmt"
-	"time"
-
 	"github.com/BurntSushi/toml"
-
-	apperrors "service-uptime-center/internal/error"
-	service "service-uptime-center/internal/service"
 )
 
-type TomlConfig struct {
-	IncidentsPollFreq time.Duration     `toml:"incident_poll_frequency"`
-	Services          []service.Service `toml:"services"`
+type ValidatableConfig interface {
+	Validate() error
 }
 
-func TomlStringDecoder(data string) (*TomlConfig, error) {
-	var cfg TomlConfig
+func TomlStringDecoder[T ValidatableConfig](data string) (T, error) {
+	var cfg T
 	_, err := toml.Decode(data, &cfg)
-	return &cfg, err
+	return cfg, err
 }
 
-func TomlFileDecoder(filePath string) (*TomlConfig, error) {
-	var cfg TomlConfig
+func TomlFileDecoder[T ValidatableConfig](filePath string) (T, error) {
+	var cfg T
 	_, err := toml.DecodeFile(filePath, &cfg)
-	return &cfg, err
+	return cfg, err
 }
 
-type TomlDecoder func(string) (*TomlConfig, error)
+type TomlDecoder[T ValidatableConfig] func(string) (T, error)
 
-func Parse(decodeToml TomlDecoder, value string) (*TomlConfig, error) {
+func Parse[T ValidatableConfig](decodeToml TomlDecoder[T], value string) (T, error) {
 	cfg, err := decodeToml(value)
 	if err != nil {
-		return nil, err
+		var zero T
+		return zero, err
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		var zero T
+		return zero, err
 	}
 
 	return cfg, nil
-}
-
-func (cfg *TomlConfig) Validate() error {
-	if len(cfg.Services) == 0 {
-		return apperrors.ErrNoServices
-	}
-
-	for _, service := range cfg.Services {
-		const MinHeartbeatFreq = time.Second * 60
-		if service.HeartbeatTimeoutDuration < MinHeartbeatFreq {
-			return fmt.Errorf("%w (min: %v): %v", apperrors.ErrHeartbeatTimeoutTooShort, MinHeartbeatFreq, service.HeartbeatTimeoutDuration)
-		}
-
-		const MinNameLen = 2
-		const MaxNameLen = 64
-		if len(service.Name) < MinNameLen || len(service.Name) > MaxNameLen {
-			return fmt.Errorf("%w (min: %d, max: %d): %s", apperrors.ErrInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
-		}
-	}
-
-	return nil
 }

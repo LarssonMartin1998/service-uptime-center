@@ -6,21 +6,26 @@ import (
 )
 
 func TestNewManagerDuplicateServiceNames(t *testing.T) {
-	services := []Service{
-		{Name: "api", HeartbeatTimeoutDuration: time.Minute},
-		{Name: "api", HeartbeatTimeoutDuration: time.Minute * 2},
+	cfg := Config{
+		Services: []Service{
+
+			{Name: "api", HeartbeatTimeoutDuration: time.Minute},
+			{Name: "api", HeartbeatTimeoutDuration: time.Minute * 2},
+		},
 	}
 
-	if _, err := NewManager(services); err == nil {
+	if _, err := NewManager(&cfg); err == nil {
 		t.Error("expected error for duplicate service names")
 	}
 }
 
 func TestUpdatePulseNonExistentService(t *testing.T) {
-	services := []Service{
-		{Name: "existing", HeartbeatTimeoutDuration: time.Minute},
+	cfg := Config{
+		Services: []Service{
+			{Name: "existing", HeartbeatTimeoutDuration: time.Minute},
+		},
 	}
-	manager, _ := NewManager(services)
+	manager, _ := NewManager(&cfg)
 
 	if manager.UpdatePulse("nonexistent") {
 		t.Error("UpdatePulse should return false for non-existent service")
@@ -33,19 +38,20 @@ func TestUpdatePulseNonExistentService(t *testing.T) {
 
 func TestGetProblematicServicesTimeoutEdgeCases(t *testing.T) {
 	now := time.Now()
-	services := []Service{
-		{Name: "justExpired", HeartbeatTimeoutDuration: time.Second},
-		{Name: "notYetExpired", HeartbeatTimeoutDuration: time.Minute},
+	cfg := Config{
+		Services: []Service{
+			{Name: "justExpired", HeartbeatTimeoutDuration: time.Second},
+			{Name: "notYetExpired", HeartbeatTimeoutDuration: time.Minute},
+		},
 	}
+	manager, _ := NewManager(&cfg)
 
-	manager, _ := NewManager(services)
+	manager.cfg.Services[0].LastPulse = now.Add(-time.Second)
+	manager.cfg.Services[1].LastPulse = now.Add(-time.Second + time.Millisecond)
 
-	manager.services[0].LastPulse = now.Add(-time.Second)
-	manager.services[1].LastPulse = now.Add(-time.Second + time.Millisecond)
+	categorizeServices := manager.categorizeServices()
 
-	problematic := manager.getProblematicServices()
-
-	if len(problematic) != 1 || problematic[0].Name != "justExpired" {
+	if len(categorizeServices.Problematic) != 1 || categorizeServices.Problematic[0].Name != "justExpired" {
 		t.Error("should detect exactly expired service but not almost-expired")
 	}
 }

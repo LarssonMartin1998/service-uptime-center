@@ -2,6 +2,7 @@
 package service
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -10,35 +11,49 @@ import (
 )
 
 type Manager struct {
-	services []Service
-	lookup   map[string]*Service
-	mutex    sync.RWMutex
+	cfg    *Config
+	lookup map[string]*Service
+	mutex  sync.RWMutex
+}
+
+type TimingIntervals struct {
+	IncidentsPollFreq         time.Duration `toml:"incident_poll_frequency"`
+	SuccessfulReportCooldown  time.Duration `toml:"successful_report_cooldown"`
+	ProblematicReportCooldown time.Duration `toml:"problematic_Report_cooldown"`
+}
+
+type Config struct {
+	Timings  TimingIntervals `toml:"timings"`
+	Services []Service       `toml:"services"`
 }
 
 type Service struct {
 	Name                     string        `toml:"name"`
 	HeartbeatTimeoutDuration time.Duration `toml:"heartbeat_timeout_duration"`
+	NotifiersStr             []string      `toml:"notifiers"`
 	LastPulse                time.Time
+	LastProblem              time.Time
+	LastSuccessReport        time.Time
 }
 
-func NewManager(services []Service) (*Manager, error) {
+func NewManager(cfg *Config) (*Manager, error) {
 	now := time.Now()
-	lookup := make(map[string]*Service, len(services))
+	lookup := make(map[string]*Service, len(cfg.Services))
 
-	for i := range services {
-		services[i].LastPulse = now
+	for i := range cfg.Services {
+		cfg.Services[i].LastPulse = now
 
-		_, ok := lookup[services[i].Name]
+		_, ok := lookup[cfg.Services[i].Name]
 		if ok {
 			return nil, apperror.ErrDuplicateServiceNames
 		}
 
-		lookup[services[i].Name] = &services[i]
+		lookup[cfg.Services[i].Name] = &cfg.Services[i]
 	}
 
 	return &Manager{
-		services: services,
-		lookup:   lookup,
+		cfg:    cfg,
+		lookup: lookup,
 	}, nil
 }
 
@@ -53,31 +68,89 @@ func (m *Manager) UpdatePulse(name string) bool {
 	return false
 }
 
-func (m *Manager) StartMonitoring(pollFreq time.Duration) {
+func (m *Manager) StartMonitoring() {
 	go func() {
 		for {
-			problematicServices := m.getProblematicServices()
-			if len(problematicServices) > 0 {
-				go handleProblematicServices(problematicServices)
+			categorizedServices := m.categorizeServices()
+
+			if len(categorizedServices.Problematic) > 0 {
+				go m.handleProblematicServices(categorizedServices.Problematic)
 			}
-			time.Sleep(pollFreq)
+			if len(categorizedServices.ReadyToReportSuccess) > 0 {
+				go m.handleReadyToReportSuccessServices(categorizedServices.ReadyToReportSuccess)
+			}
+
+			time.Sleep(m.cfg.Timings.IncidentsPollFreq)
 		}
 	}()
 }
 
-func (m *Manager) getProblematicServices() []*Service {
+type ServiceCategories struct {
+	Problematic          []*Service
+	ReadyToReportSuccess []*Service
+}
+
+func (m *Manager) categorizeServices() ServiceCategories {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	var problematic []*Service
-	for i := range m.services {
-		if time.Since(m.services[i].LastPulse) >= m.services[i].HeartbeatTimeoutDuration {
-			problematic = append(problematic, &m.services[i])
+	var categories ServiceCategories
+	for i := range m.cfg.Services {
+		service := &m.cfg.Services[i]
+
+		if time.Since(service.LastPulse) >= service.HeartbeatTimeoutDuration {
+			categories.Problematic = append(categories.Problematic, service)
+		} else if time.Since(service.LastSuccessReport) >= m.cfg.Timings.SuccessfulReportCooldown &&
+			time.Since(service.LastProblem) >= m.cfg.Timings.SuccessfulReportCooldown {
+			categories.ReadyToReportSuccess = append(categories.ReadyToReportSuccess, service)
 		}
 	}
-	return problematic
+	return categories
 }
 
-func handleProblematicServices(services []*Service) {
+func (m *Manager) handleProblematicServices(services []*Service) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	now := time.Now()
+	for _, service := range services {
+		service.LastProblem = now
+	}
 	slog.Info("Detected problematic services", "services", services)
+}
+
+func (m *Manager) handleReadyToReportSuccessServices(services []*Service) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	now := time.Now()
+	for _, service := range services {
+		service.LastSuccessReport = now
+	}
+	slog.Info("Reporting successful services", "services", services)
+}
+
+func (cfg *Config) Validate() error {
+	if len(cfg.Services) == 0 {
+		return apperror.ErrNoServices
+	}
+
+	for _, service := range cfg.Services {
+		const MinHeartbeatFreq = time.Second * 60
+		if service.HeartbeatTimeoutDuration < MinHeartbeatFreq {
+			return fmt.Errorf("%w (min: %v): %v", apperror.ErrHeartbeatTimeoutTooShort, MinHeartbeatFreq, service.HeartbeatTimeoutDuration)
+		}
+
+		const MinNameLen = 2
+		const MaxNameLen = 64
+		if len(service.Name) < MinNameLen || len(service.Name) > MaxNameLen {
+			return fmt.Errorf("%w (min: %d, max: %d): %s", apperror.ErrInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
+		}
+
+		if len(service.NotifiersStr) == 0 {
+			return fmt.Errorf("%w: 'Service=%s'", apperror.ErrNoNotifiers, service.Name)
+		}
+	}
+
+	return nil
 }
