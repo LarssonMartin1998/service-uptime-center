@@ -25,6 +25,9 @@ func parsePasswordFile(path string) (string, error) {
 	}
 
 	pw := strings.TrimSpace(string(data))
+	if len(pw) == 0 {
+		return "", apperrors.ErrPasswordFileIsEmpty
+	}
 
 	const MaxPasswordLen = 255
 	if len(pw) > MaxPasswordLen {
