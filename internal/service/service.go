@@ -2,10 +2,11 @@
 package service
 
 import (
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
+
+	apperror "service-uptime-center/internal/error"
 )
 
 type Manager struct {
@@ -29,7 +30,7 @@ func NewManager(services []Service) (*Manager, error) {
 
 		_, ok := lookup[services[i].Name]
 		if ok {
-			return nil, fmt.Errorf("found services with the same name when creating lookup, this is not allowed")
+			return nil, apperror.ErrDuplicateServiceNames
 		}
 
 		lookup[services[i].Name] = &services[i]

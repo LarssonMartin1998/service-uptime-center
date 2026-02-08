@@ -9,4 +9,5 @@ var (
 	ErrPasswordTooLong          = errors.New("password token too long")
 	ErrHeartbeatTimeoutTooShort = errors.New("heartbeat timeout duration too short")
 	ErrInvalidServiceName       = errors.New("invalid service name length")
+	ErrDuplicateServiceNames    = errors.New("duplicate server names detected, not allowed")
 )

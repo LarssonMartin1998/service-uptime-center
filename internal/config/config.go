@@ -45,7 +45,7 @@ func Parse(decodeToml TomlDecoder, value string) (*TomlConfig, error) {
 
 func (cfg *TomlConfig) Validate() error {
 	if len(cfg.Services) == 0 {
-		return fmt.Errorf("%w", apperrors.ErrNoServices)
+		return apperrors.ErrNoServices
 	}
 
 	for _, service := range cfg.Services {
