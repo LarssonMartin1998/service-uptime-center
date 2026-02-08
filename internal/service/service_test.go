@@ -49,7 +49,7 @@ func TestGetProblematicServicesTimeoutEdgeCases(t *testing.T) {
 	manager.cfg.Services[0].LastPulse = now.Add(-time.Second)
 	manager.cfg.Services[1].LastPulse = now.Add(-time.Second + time.Millisecond)
 
-	categorizeServices := manager.categorizeServices()
+	categorizeServices := manager.getProblematicServices()
 
 	if len(categorizeServices.Problematic) != 1 || categorizeServices.Problematic[0].Name != "justExpired" {
 		t.Error("should detect exactly expired service but not almost-expired")

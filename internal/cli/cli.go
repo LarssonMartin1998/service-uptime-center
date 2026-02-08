@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
-	apperrors "service-uptime-center/internal/error"
+	"service-uptime-center/internal/app/apperror"
 	"time"
 )
 
@@ -27,13 +27,13 @@ func ParseArgs() *CliArgs {
 
 	if portFlag > math.MaxUint16 {
 		slog.Error("--port flag is too high.", "max value", math.MaxUint16, "got", portFlag)
-		os.Exit(apperrors.CodeInvalidCliArgument)
+		os.Exit(apperror.CodeInvalidCliArgument)
 	}
 
 	duration, err := time.ParseDuration(*sleepDurationStr)
 	if err != nil {
 		slog.Error("--sleep-duration has invalid format (supported format: ns, us, ms, s, m, h)")
-		os.Exit(apperrors.CodeInvalidCliArgument)
+		os.Exit(apperror.CodeInvalidCliArgument)
 	}
 
 	return &CliArgs{

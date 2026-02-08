@@ -6,9 +6,10 @@ import (
 	"os"
 	"strings"
 
+	"service-uptime-center/config"
+	"service-uptime-center/internal/app"
+	"service-uptime-center/internal/app/apperror"
 	"service-uptime-center/internal/cli"
-	"service-uptime-center/internal/config"
-	apperrors "service-uptime-center/internal/error"
 	"service-uptime-center/internal/server"
 	"service-uptime-center/internal/service"
 )
@@ -26,12 +27,12 @@ func parsePasswordFile(path string) (string, error) {
 
 	pw := strings.TrimSpace(string(data))
 	if len(pw) == 0 {
-		return "", apperrors.ErrPasswordFileIsEmpty
+		return "", apperror.ErrPasswordFileIsEmpty
 	}
 
 	const MaxPasswordLen = 255
 	if len(pw) > MaxPasswordLen {
-		return "", fmt.Errorf("%w (max: %d)", apperrors.ErrPasswordTooLong, MaxPasswordLen)
+		return "", fmt.Errorf("%w (max: %d)", apperror.ErrPasswordTooLong, MaxPasswordLen)
 	}
 
 	return pw, nil
@@ -39,26 +40,29 @@ func parsePasswordFile(path string) (string, error) {
 
 func main() {
 	args := cli.ParseArgs()
+	pw, err := parsePasswordFile(args.PwFilePath)
+	if err != nil {
+		slog.Error("failed to read password file", "path", args.PwFilePath, "error", err)
+		os.Exit(apperror.CodeFailedReadingPasswordFile)
+	}
 
-	cfg, err := config.Parse(config.TomlFileDecoder[*service.Config], args.ConfigPath)
+	cfg, err := config.Parse(config.TomlFileDecoder[*app.Config], args.ConfigPath)
 	if err != nil {
 		slog.Error("failed to parse toml config", "error", err)
-		os.Exit(apperrors.CodeInvalidConfig)
+		os.Exit(apperror.CodeInvalidConfig)
 	}
 
-	if pw, err := parsePasswordFile(args.PwFilePath); err != nil {
-		slog.Error("failed to read password file", "path", args.PwFilePath, "error", err)
-		os.Exit(apperrors.CodeFailedReadingPasswordFile)
-	} else {
-		serviceManager, err := service.NewManager(cfg)
-		if err != nil {
-			slog.Error("failed to create service mapper from config", "error", err)
-			os.Exit(apperrors.CodeInvalidConfig)
-		}
-
-		server.SetupEndpoints(pw, serviceManager)
-		serviceManager.StartMonitoring()
+	managerLocator, err := app.NewManagerLocator(cfg)
+	if err != nil {
+		slog.Error("failed to create manager locator from config", "error", err)
+		os.Exit(apperror.CodeInvalidConfig)
 	}
+
+	server.SetupEndpoints(pw, managerLocator.ServiceManager)
+	managerLocator.ServiceManager.StartMonitoring(managerLocator.NotificationManager, service.MonitoringInstructions{
+		Timings:   &cfg.Timings,
+		Notifiers: cfg.Notifiers,
+	})
 
 	server.ServeAndAwaitTermination(args.Port)
 }

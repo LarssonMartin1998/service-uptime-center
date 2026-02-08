@@ -2,12 +2,15 @@
 package service
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
-	apperror "service-uptime-center/internal/error"
+	"service-uptime-center/internal/app/apperror"
+	"service-uptime-center/internal/app/timings"
+	"service-uptime-center/notification"
 )
 
 type Manager struct {
@@ -16,21 +19,13 @@ type Manager struct {
 	mutex  sync.RWMutex
 }
 
-type TimingIntervals struct {
-	IncidentsPollFreq         time.Duration `toml:"incident_poll_frequency"`
-	SuccessfulReportCooldown  time.Duration `toml:"successful_report_cooldown"`
-	ProblematicReportCooldown time.Duration `toml:"problematic_Report_cooldown"`
-}
-
 type Config struct {
-	Timings  TimingIntervals `toml:"timings"`
-	Services []Service       `toml:"services"`
+	Services []Service `toml:"services"`
 }
 
 type Service struct {
 	Name                     string        `toml:"name"`
 	HeartbeatTimeoutDuration time.Duration `toml:"heartbeat_timeout_duration"`
-	NotifiersStr             []string      `toml:"notifiers"`
 	LastPulse                time.Time
 	LastProblem              time.Time
 	LastSuccessReport        time.Time
@@ -68,66 +63,80 @@ func (m *Manager) UpdatePulse(name string) bool {
 	return false
 }
 
-func (m *Manager) StartMonitoring() {
+type MonitoringInstructions struct {
+	Timings   *timings.Timings
+	Notifiers []string
+}
+
+func (m *Manager) StartMonitoring(notificationManager *notification.Manager, instr MonitoringInstructions) {
 	go func() {
 		for {
-			categorizedServices := m.categorizeServices()
-
-			if len(categorizedServices.Problematic) > 0 {
-				go m.handleProblematicServices(categorizedServices.Problematic)
-			}
-			if len(categorizedServices.ReadyToReportSuccess) > 0 {
-				go m.handleReadyToReportSuccessServices(categorizedServices.ReadyToReportSuccess)
+			problematic := m.getProblematicServices()
+			if len(problematic) > 0 {
+				m.handleProblematicServices(notificationManager, instr.Notifiers, problematic)
 			}
 
-			time.Sleep(m.cfg.Timings.IncidentsPollFreq)
+			time.Sleep(instr.Timings.IncidentsPollFreq)
 		}
+	}()
+
+	start := time.Now()
+	go func() {
+		time.Sleep(instr.Timings.SuccessfulReportCooldown)
+
+        if err := notificationManager.Send(instr.Notifiers, notification.SendData{
+			Title: "Service Uptime Center running without any issues.",
+			Body:  "",
+		}); err != nil {
+            slog.Error("Cannot send notification, monitoring may be compromised", "error", err)
+        } else {
+            slog.Info("Service is still running", "uptime", time.Since(start).String())
+        }   
 	}()
 }
 
-type ServiceCategories struct {
-	Problematic          []*Service
-	ReadyToReportSuccess []*Service
-}
-
-func (m *Manager) categorizeServices() ServiceCategories {
+func (m *Manager) getProblematicServices() []*Service {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	var categories ServiceCategories
+	var problematic []*Service
 	for i := range m.cfg.Services {
 		service := &m.cfg.Services[i]
 
 		if time.Since(service.LastPulse) >= service.HeartbeatTimeoutDuration {
-			categories.Problematic = append(categories.Problematic, service)
-		} else if time.Since(service.LastSuccessReport) >= m.cfg.Timings.SuccessfulReportCooldown &&
-			time.Since(service.LastProblem) >= m.cfg.Timings.SuccessfulReportCooldown {
-			categories.ReadyToReportSuccess = append(categories.ReadyToReportSuccess, service)
+			problematic = append(problematic, service)
 		}
 	}
-	return categories
+	return problematic
 }
 
-func (m *Manager) handleProblematicServices(services []*Service) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+func (m *Manager) handleProblematicServices(notificationManager *notification.Manager, notifiers []string, services []*Service) {
+    m.mutex.Lock()
 
-	now := time.Now()
-	for _, service := range services {
-		service.LastProblem = now
-	}
-	slog.Info("Detected problematic services", "services", services)
-}
+    now := time.Now()
+    var buf bytes.Buffer
 
-func (m *Manager) handleReadyToReportSuccessServices(services []*Service) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+    buf.WriteString("Service Name, Last Pulse, Problem Duration, Overdue")
+    for _, service := range services {
+        service.LastProblem = now
+        problemDuration := time.Since(service.LastPulse)
+        overdue := problemDuration - service.HeartbeatTimeoutDuration
+        if _, err := fmt.Fprintf(&buf, "%s, %s, %s, %s\n", service.Name, service.LastPulse.String(), problemDuration.String(), overdue.String()); err != nil {
+            slog.Error("Failed to write service data to buffer, notification will be missing this data", "service", service.Name, "error", err)
+        }
+    }
 
-	now := time.Now()
-	for _, service := range services {
-		service.LastSuccessReport = now
-	}
-	slog.Info("Reporting successful services", "services", services)
+    data := notification.SendData{
+        Title: fmt.Sprintf("Problem detected with '%d', services", len(services)),
+        Body:  buf.String(),
+    }
+
+    m.mutex.Unlock()
+
+    slog.Info("Detected problematic services", "services", services)
+    if err := notificationManager.Send(notifiers, data); err != nil {
+        slog.Error("Failed to send notification - monitoring may be compromised", "error", err)
+    }
 }
 
 func (cfg *Config) Validate() error {
@@ -145,10 +154,6 @@ func (cfg *Config) Validate() error {
 		const MaxNameLen = 64
 		if len(service.Name) < MinNameLen || len(service.Name) > MaxNameLen {
 			return fmt.Errorf("%w (min: %d, max: %d): %s", apperror.ErrInvalidServiceName, MinNameLen, MaxNameLen, service.Name)
-		}
-
-		if len(service.NotifiersStr) == 0 {
-			return fmt.Errorf("%w: 'Service=%s'", apperror.ErrNoNotifiers, service.Name)
 		}
 	}
 

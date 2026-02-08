@@ -1,5 +1,4 @@
-// Package error contains internal error definitions as values and error codes
-package error
+package apperror
 
 import "errors"
 
@@ -12,4 +11,10 @@ var (
 	ErrDuplicateServiceNames    = errors.New("duplicate server names detected, not allowed")
 	ErrNoNotifiers              = errors.New("service is missing notifiers, not allowed")
 	ErrInvalidNotifProtocol     = errors.New("notification protocol doesn't exist")
+)
+
+var (
+	CodeInvalidConfig             = 1
+	CodeFailedReadingPasswordFile = 2
+	CodeInvalidCliArgument        = 3
 )
