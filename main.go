@@ -40,19 +40,41 @@ func parsePasswordFile(path string) (string, error) {
 
 func main() {
 	args := cli.ParseArgs()
-	pw, err := parsePasswordFile(args.PwFilePath)
-	if err != nil {
-		slog.Error("failed to read password file", "path", args.PwFilePath, "error", err)
+
+	type pwResult struct {
+		pw  string
+		err error
+	}
+	type cfgResult struct {
+		cfg *app.Config
+		err error
+	}
+	pwChan := make(chan pwResult, 1)
+	cfgChan := make(chan cfgResult, 1)
+
+	go func() {
+		pw, err := parsePasswordFile(args.PwFilePath)
+		pwChan <- pwResult{pw: pw, err: err}
+	}()
+	go func() {
+		cfg, err := config.Parse(config.TomlFileDecoder[*app.Config], args.ConfigPath)
+		cfgChan <- cfgResult{cfg: cfg, err: err}
+	}()
+	pwRes := <-pwChan
+	cfgRes := <-cfgChan
+
+	if pwRes.err != nil {
+		slog.Error("failed to read password file", "path", args.PwFilePath, "error", pwRes.err)
 		os.Exit(apperror.CodeFailedReadingPasswordFile)
 	}
-
-	cfg, err := config.Parse(config.TomlFileDecoder[*app.Config], args.ConfigPath)
-	if err != nil {
-		slog.Error("failed to parse toml config", "error", err)
+	if cfgRes.err != nil {
+		slog.Error("failed to parse toml config", "error", cfgRes.err)
 		os.Exit(apperror.CodeInvalidConfig)
 	}
+	pw := pwRes.pw
+	cfg := cfgRes.cfg
 
-	managerLocator, err := app.NewManagerLocator(cfg)
+	managerLocator, err := app.NewManagerLocator(cfgRes.cfg)
 	if err != nil {
 		slog.Error("failed to create manager locator from config", "error", err)
 		os.Exit(apperror.CodeInvalidConfig)
