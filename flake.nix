@@ -24,7 +24,7 @@
           version = "0.1";
           src = ./.;
 
-          vendorHash = "sha256-XXgXzv6MARTUse1lf4RAaMp9xg8FfysaPMM7wq5zdlw=";
+          vendorHash = "sha256-WOMuWi2exTD5KDOBLbFd/B5Qnze/snlld8eZ00eBKX0=";
 
           doCheck = true;
           checkPhase = ''
