@@ -60,8 +60,14 @@ func SetupEndpoints(authToken string, manager *service.Manager) {
 				mw.MiddlewareMethodGet,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusNotImplemented)
-				fmt.Fprint(w, "Missing implementation")
+				json, err := manager.GetStatusJSON()
+				if err != nil {
+					http.Error(w, "failed to serialize services", http.StatusInternalServerError)
+					return
+				}
+
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, string(json))
 			},
 		},
 		{
