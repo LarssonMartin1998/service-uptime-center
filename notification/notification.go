@@ -19,7 +19,12 @@ type NotifyProtocol interface {
 }
 
 type Manager struct {
-	protocols map[string]NotifyProtocol
+	protocols map[string]protocolEntry
+}
+
+type protocolEntry struct {
+	notify   NotifyProtocol
+	validate func() error
 }
 
 type ManagerConfig struct {
@@ -34,18 +39,15 @@ func (m *ManagerConfig) ValidateFor(notifiers []string, manager *Manager) error 
 			continue
 		}
 		seen[protocol] = struct{}{}
-		if _, ok := manager.protocols[protocol]; !ok {
+		entry, ok := manager.protocols[protocol]
+		if !ok {
 			return ErrInvalidProtocol
 		}
-		switch protocol {
-		case "mail":
-			if err := m.Mail.Validate(); err != nil {
-				return err
-			}
-		case "ntfy":
-			if err := m.Ntfy.Validate(); err != nil {
-				return err
-			}
+		if entry.validate == nil {
+			return ErrInvalidProtocol
+		}
+		if err := entry.validate(); err != nil {
+			return err
 		}
 	}
 
@@ -54,24 +56,31 @@ func (m *ManagerConfig) ValidateFor(notifiers []string, manager *Manager) error 
 
 func NewManager(cfg *ManagerConfig) *Manager {
 	return &Manager{
-		protocols: map[string]NotifyProtocol{
-			"mail": newMailNotifier(&cfg.Mail),
-			"ntfy": newNtfyNotifier(&cfg.Ntfy),
+		protocols: map[string]protocolEntry{
+			"mail": {
+				notify:   newMailNotifier(&cfg.Mail),
+				validate: cfg.Mail.Validate,
+			},
+			"ntfy": {
+				notify:   newNtfyNotifier(&cfg.Ntfy),
+				validate: cfg.Ntfy.Validate,
+			},
 		},
 	}
 }
 
 func (p *Manager) Send(protocols []string, data SendData) error {
 	for _, protocol := range protocols {
-		found, ok := p.protocols[protocol]
+		entry, ok := p.protocols[protocol]
 		if !ok {
 			return ErrInvalidProtocol
 		}
 
-		if err := found.send(data); err != nil {
+		if err := entry.notify.send(data); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
 }
