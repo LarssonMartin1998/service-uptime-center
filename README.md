@@ -7,7 +7,7 @@ A lightweight, self-hosted service monitoring system that tracks heartbeats from
 - **Heartbeat Monitoring**: Services send periodic pulses via HTTP POST
 - **Configurable Timeouts**: Set individual timeout thresholds per service
 - **Notification Channels**: Email and ntfy.sh
-- ~~**Fallback Notifications**: Ensure you're always alerted even if primary notifications fail~~ (WIP)
+- **Fallback Notifications**: Optional secondary notifiers when primary ones fail
 - **Self-Monitoring**: The system monitors itself and reports its own health
 
 ## Quick Start
@@ -17,7 +17,8 @@ A lightweight, self-hosted service monitoring system that tracks heartbeats from
 Create a `config.toml` file, you only need to configure the notifiers that you plan on using, the rest can be left blank:
 
 ```toml
-notifiers = ["mail", "ntfy"]
+notifiers = ["mail"]
+fallback_notifiers = ["ntfy"]
 
 [notification_settings.mail]
 from = "alerts@yourdomain.com"

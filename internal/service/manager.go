@@ -64,7 +64,7 @@ func (m *Manager) UpdatePulse(name string) bool {
 
 type MonitoringInstructions struct {
 	Timings   *timings.Timings
-	Notifiers []string
+	Notifiers notification.ProtocolTargets
 }
 
 func (m *Manager) StartMonitoring(notificationManager *notification.Manager, instr MonitoringInstructions) {
@@ -83,7 +83,7 @@ func (m *Manager) StartMonitoring(notificationManager *notification.Manager, ins
 	go func() {
 		time.Sleep(instr.Timings.SuccessfulReportCooldown)
 
-		if err := notificationManager.Send(instr.Notifiers, notification.SendData{
+		if err := notificationManager.SendWithFallback(instr.Notifiers, notification.SendData{
 			Title: "Service Uptime Center running without any issues.",
 			Body:  "",
 		}); err != nil {
@@ -109,7 +109,7 @@ func (m *Manager) getProblematicServices() []*Service {
 	return problematic
 }
 
-func (m *Manager) handleProblematicServices(notificationManager *notification.Manager, notifiers []string, services []*Service) {
+func (m *Manager) handleProblematicServices(notificationManager *notification.Manager, targets notification.ProtocolTargets, services []*Service) {
 	m.mutex.Lock()
 
 	now := time.Now()
@@ -133,7 +133,7 @@ func (m *Manager) handleProblematicServices(notificationManager *notification.Ma
 	m.mutex.Unlock()
 
 	slog.Info("Detected problematic services", "services", services)
-	if err := notificationManager.Send(notifiers, data); err != nil {
+	if err := notificationManager.SendWithFallback(targets, data); err != nil {
 		slog.Error("Failed to send notification - monitoring may be compromised", "error", err)
 	}
 }

@@ -2,6 +2,8 @@
 package app
 
 import (
+	"fmt"
+
 	"service-uptime-center/internal/app/apperror"
 	"service-uptime-center/internal/app/timings"
 	"service-uptime-center/internal/service"
@@ -18,6 +20,9 @@ func NewManagerLocator(cfg *Config) (*managerLocator, error) {
 	if err := cfg.Notification.ValidateFor(cfg.Notifiers, notificationManager); err != nil {
 		return nil, err
 	}
+	if err := cfg.Notification.ValidateFor(cfg.FallbackNotifiers, notificationManager); err != nil {
+		return nil, err
+	}
 
 	serviceManager, err := service.NewManager(&cfg.Service)
 	if err != nil {
@@ -31,10 +36,11 @@ func NewManagerLocator(cfg *Config) (*managerLocator, error) {
 }
 
 type Config struct {
-	Notification notification.ManagerConfig `toml:"notification_settings"`
-	Service      service.Config             `toml:"service_settings"`
-	Timings      timings.Timings            `toml:"time_settings"`
-	Notifiers    []string                   `toml:"notifiers"`
+	Notification      notification.ManagerConfig `toml:"notification_settings"`
+	Service           service.Config             `toml:"service_settings"`
+	Timings           timings.Timings            `toml:"time_settings"`
+	Notifiers         []string                   `toml:"notifiers"`
+	FallbackNotifiers []string                   `toml:"fallback_notifiers"`
 }
 
 func (a *Config) Validate() error {
@@ -44,6 +50,18 @@ func (a *Config) Validate() error {
 
 	if err := a.Service.Validate(); err != nil {
 		return err
+	}
+
+	if len(a.FallbackNotifiers) != 0 {
+		seen := make(map[string]struct{}, len(a.Notifiers))
+		for _, protocol := range a.Notifiers {
+			seen[protocol] = struct{}{}
+		}
+		for _, protocol := range a.FallbackNotifiers {
+			if _, ok := seen[protocol]; ok {
+				return fmt.Errorf("%w: %s", notification.ErrDuplicateFallback, protocol)
+			}
+		}
 	}
 
 	return nil

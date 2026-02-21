@@ -11,6 +11,7 @@ import (
 	"service-uptime-center/internal/cli"
 	"service-uptime-center/internal/server"
 	"service-uptime-center/internal/service"
+	"service-uptime-center/notification"
 )
 
 func main() {
@@ -57,8 +58,11 @@ func main() {
 
 	server.SetupEndpoints(pw, managerLocator.ServiceManager)
 	managerLocator.ServiceManager.StartMonitoring(managerLocator.NotificationManager, service.MonitoringInstructions{
-		Timings:   &cfg.Timings,
-		Notifiers: cfg.Notifiers,
+		Timings: &cfg.Timings,
+		Notifiers: notification.ProtocolTargets{
+			Primary:  cfg.Notifiers,
+			Fallback: cfg.FallbackNotifiers,
+		},
 	})
 
 	server.ServeAndAwaitTermination(args.Port)
