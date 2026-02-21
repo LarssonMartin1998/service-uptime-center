@@ -6,7 +6,7 @@ A lightweight, self-hosted service monitoring system that tracks heartbeats from
 
 - **Heartbeat Monitoring**: Services send periodic pulses via HTTP POST
 - **Configurable Timeouts**: Set individual timeout thresholds per service
-- **Notification Channels**: Only email for now (More notifiers WIP)
+- **Notification Channels**: Email and ntfy.sh
 - ~~**Fallback Notifications**: Ensure you're always alerted even if primary notifications fail~~ (WIP)
 - **Self-Monitoring**: The system monitors itself and reports its own health
 
@@ -17,7 +17,7 @@ A lightweight, self-hosted service monitoring system that tracks heartbeats from
 Create a `config.toml` file, you only need to configure the notifiers that you plan on using, the rest can be left blank:
 
 ```toml
-notifiers = ["mail"]
+notifiers = ["mail", "ntfy"]
 
 [notification_settings.mail]
 from = "alerts@yourdomain.com"
@@ -28,6 +28,11 @@ outgoing = "smtp.yourdomain.com"
 port = 587
 user = "alerts@yourdomain.com"
 password_file = "path/to/file"
+
+[notification_settings.ntfy]
+server = "https://ntfy.sh"
+topic = "service-alerts"
+token_file = "path/to/token-file" # optional
 
 [[service_settings.services]]
 name = "web-app"
@@ -54,6 +59,12 @@ If using email notifications, create an SMTP password file:
 ```bash
 echo "your-smtp-password" > smtp-password.txt
 chmod 600 smtp-password.txt
+```
+
+If using ntfy with a token, create a token file:
+```bash
+echo "your-ntfy-token" > ntfy-token.txt
+chmod 600 ntfy-token.txt
 ```
 
 ### 3. Run the Service
