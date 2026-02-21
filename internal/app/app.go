@@ -17,12 +17,6 @@ type managerLocator struct {
 
 func NewManagerLocator(cfg *Config) (*managerLocator, error) {
 	notificationManager := notification.NewManager(&cfg.Notification)
-	if err := cfg.Notification.ValidateFor(cfg.Notifiers, notificationManager); err != nil {
-		return nil, err
-	}
-	if err := cfg.Notification.ValidateFor(cfg.FallbackNotifiers, notificationManager); err != nil {
-		return nil, err
-	}
 
 	serviceManager, err := service.NewManager(&cfg.Service)
 	if err != nil {
@@ -49,6 +43,14 @@ func (a *Config) Validate() error {
 	}
 
 	if err := a.Service.Validate(); err != nil {
+		return err
+	}
+
+	notificationManager := notification.NewManager(&a.Notification)
+	if err := a.Notification.ValidateFor(a.Notifiers, notificationManager); err != nil {
+		return err
+	}
+	if err := a.Notification.ValidateFor(a.FallbackNotifiers, notificationManager); err != nil {
 		return err
 	}
 
