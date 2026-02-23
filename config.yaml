@@ -1,0 +1,25 @@
+notifiers:
+  - mail
+fallback_notifiers: []
+
+time_settings:
+  incident_poll_frequency: "6h"
+  successful_report_cooldown: "72h"
+  problematic_report_cooldown: "24h"
+
+notification_settings:
+  mail:
+    from: "Martin Larsson Automation"
+    to: "me@erikmartinlarsson.dev"
+    smtp:
+      outgoing: "mailcluster.loopia.se"
+      port: 587
+      user: "me@erikmartinlarsson.dev"
+      password_file: "password.txt"
+
+service_settings:
+  services:
+    - name: "rpi-rsync"
+      heartbeat_timeout_duration: "24h"
+    - name: "restic-bkp"
+      heartbeat_timeout_duration: "24h"

@@ -9,8 +9,8 @@ with lib;
 
 let
   cfg = config.services.service-uptime-center;
-  configFile = pkgs.writeText "service-uptime-center.toml" (
-    lib.generators.toTOML { } {
+  configFile = pkgs.writeText "service-uptime-center.yaml" (
+    lib.generators.toYAML { } {
       notifiers = cfg.notifiers;
       fallback_notifiers = cfg.fallbackNotifiers;
 

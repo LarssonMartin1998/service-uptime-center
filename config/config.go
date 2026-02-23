@@ -2,29 +2,35 @@
 package config
 
 import (
-	"github.com/BurntSushi/toml"
+	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type ValidatableConfig interface {
 	Validate() error
 }
 
-func TomlStringDecoder[T ValidatableConfig](data string) (T, error) {
+func YamlStringDecoder[T ValidatableConfig](data string) (T, error) {
 	var cfg T
-	_, err := toml.Decode(data, &cfg)
+	err := yaml.Unmarshal([]byte(data), &cfg)
 	return cfg, err
 }
 
-func TomlFileDecoder[T ValidatableConfig](filePath string) (T, error) {
+func YamlFileDecoder[T ValidatableConfig](filePath string) (T, error) {
 	var cfg T
-	_, err := toml.DecodeFile(filePath, &cfg)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return cfg, err
+	}
+	err = yaml.Unmarshal(data, &cfg)
 	return cfg, err
 }
 
-type TomlDecoder[T ValidatableConfig] func(string) (T, error)
+type YamlDecoder[T ValidatableConfig] func(string) (T, error)
 
-func Parse[T ValidatableConfig](decodeToml TomlDecoder[T], value string) (T, error) {
-	cfg, err := decodeToml(value)
+func Parse[T ValidatableConfig](decodeYaml YamlDecoder[T], value string) (T, error) {
+	cfg, err := decodeYaml(value)
 	if err != nil {
 		var zero T
 		return zero, err

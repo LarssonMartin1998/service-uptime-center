@@ -1,4 +1,4 @@
 result
 vendor/
 service-uptime-center
-config.toml
+config.yaml

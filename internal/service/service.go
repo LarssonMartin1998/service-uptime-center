@@ -7,8 +7,8 @@ import (
 )
 
 type Service struct {
-	Name                     string        `toml:"name"`
-	HeartbeatTimeoutDuration time.Duration `toml:"heartbeat_timeout_duration"`
+	Name                     string        `yaml:"name"`
+	HeartbeatTimeoutDuration time.Duration `yaml:"heartbeat_timeout_duration"`
 	LastPulse                time.Time
 	LastProblem              time.Time
 	LastSuccessReport        time.Time

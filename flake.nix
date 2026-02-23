@@ -22,7 +22,7 @@
           pname = "service-uptime-center";
           version = "0.1";
           src = ./.;
-          vendorHash = "sha256-WOMuWi2exTD5KDOBLbFd/B5Qnze/snlld8eZ00eBKX0=";
+          vendorHash = "sha256-o61u+DK+UwID1SAoxy5kKto7oz7tFV6EAE5xcuBk32A=";
           doCheck = true;
           checkPhase = ''
             go test ./...

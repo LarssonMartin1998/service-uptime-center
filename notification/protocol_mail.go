@@ -14,17 +14,17 @@ var (
 )
 
 type SMTPContext struct {
-	Outgoing     string `toml:"outgoing"`
-	Port         int    `toml:"port"`
-	User         string `toml:"user"`
-	PasswordFile string `toml:"password_file"`
+	Outgoing     string `yaml:"outgoing"`
+	Port         int    `yaml:"port"`
+	User         string `yaml:"user"`
+	PasswordFile string `yaml:"password_file"`
 	password     string
 }
 
 type MailConfig struct {
-	From string      `toml:"from"`
-	To   string      `toml:"to"`
-	SMTP SMTPContext `toml:"smtp"`
+	From string      `yaml:"from"`
+	To   string      `yaml:"to"`
+	SMTP SMTPContext `yaml:"smtp"`
 }
 
 func (m *MailConfig) Validate() error {

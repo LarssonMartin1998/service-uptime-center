@@ -18,9 +18,9 @@ var (
 )
 
 type NtfyConfig struct {
-	Server    string `toml:"server"`
-	Topic     string `toml:"topic"`
-	TokenFile string `toml:"token_file"`
+	Server    string `yaml:"server"`
+	Topic     string `yaml:"topic"`
+	TokenFile string `yaml:"token_file"`
 	token     string
 }
 

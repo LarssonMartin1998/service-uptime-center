@@ -33,7 +33,7 @@ func main() {
 		pwChan <- pwResult{pw: pw, err: err}
 	}()
 	go func() {
-		cfg, err := config.Parse(config.TomlFileDecoder[*app.Config], args.ConfigPath)
+		cfg, err := config.Parse(config.YamlFileDecoder[*app.Config], args.ConfigPath)
 		cfgChan <- cfgResult{cfg: cfg, err: err}
 	}()
 	pwRes := <-pwChan
@@ -44,7 +44,7 @@ func main() {
 		os.Exit(apperror.CodeFailedReadingPasswordFile)
 	}
 	if cfgRes.err != nil {
-		slog.Error("failed to parse toml config", "error", cfgRes.err)
+		slog.Error("failed to parse yaml config", "error", cfgRes.err)
 		os.Exit(apperror.CodeInvalidConfig)
 	}
 	pw := pwRes.pw

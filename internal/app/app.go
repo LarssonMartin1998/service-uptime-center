@@ -30,11 +30,11 @@ func NewManagerLocator(cfg *Config) (*managerLocator, error) {
 }
 
 type Config struct {
-	Notification      notification.ManagerConfig `toml:"notification_settings"`
-	Service           service.Config             `toml:"service_settings"`
-	Timings           timings.Timings            `toml:"time_settings"`
-	Notifiers         []string                   `toml:"notifiers"`
-	FallbackNotifiers []string                   `toml:"fallback_notifiers"`
+	Notification      notification.ManagerConfig `yaml:"notification_settings"`
+	Service           service.Config             `yaml:"service_settings"`
+	Timings           timings.Timings            `yaml:"time_settings"`
+	Notifiers         []string                   `yaml:"notifiers"`
+	FallbackNotifiers []string                   `yaml:"fallback_notifiers"`
 }
 
 func (a *Config) Validate() error {

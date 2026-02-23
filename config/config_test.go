@@ -9,27 +9,27 @@ import (
 )
 
 type NestedStruct struct {
-	ID       int               `toml:"id"`
-	Tags     []string          `toml:"tags"`
-	Metadata map[string]string `toml:"metadata"`
+	ID       int               `yaml:"id"`
+	Tags     []string          `yaml:"tags"`
+	Metadata map[string]string `yaml:"metadata"`
 }
 
 type TestFoo struct {
-	Var1 bool   `toml:"var1"`
-	Var2 string `toml:"var2"`
-	Var3 int    `toml:"var3"`
+	Var1 bool   `yaml:"var1"`
+	Var2 string `yaml:"var2"`
+	Var3 int    `yaml:"var3"`
 
-	FloatVal float64       `toml:"float_val"`
-	Duration time.Duration `toml:"duration"`
+	FloatVal float64       `yaml:"float_val"`
+	Duration time.Duration `yaml:"duration"`
 
-	StringSlice []string          `toml:"string_slice"`
-	IntSlice    []int             `toml:"int_slice"`
-	StringMap   map[string]string `toml:"string_map"`
-	IntMap      map[string]int    `toml:"int_map"`
+	StringSlice []string          `yaml:"string_slice"`
+	IntSlice    []int             `yaml:"int_slice"`
+	StringMap   map[string]string `yaml:"string_map"`
+	IntMap      map[string]int    `yaml:"int_map"`
 
-	Nested  NestedStruct            `toml:"nested"`
-	Items   []NestedStruct          `toml:"items"`
-	Configs map[string]NestedStruct `toml:"configs"`
+	Nested  NestedStruct            `yaml:"nested"`
+	Items   []NestedStruct          `yaml:"items"`
+	Configs map[string]NestedStruct `yaml:"configs"`
 }
 
 func (t TestFoo) Validate() error {
@@ -64,62 +64,58 @@ var (
 )
 
 var (
-	testConfigToml = `
-var1 = true
-var2 = "test-value"
-var3 = 42
-float_val = 3.14
-duration = "5m30s"
+	testConfigYaml = `
+var1: true
+var2: "test-value"
+var3: 42
+float_val: 3.14
+duration: "5m30s"
 
-string_slice = ["apple", "banana", "cherry"]
-int_slice = [1, 2, 3, 4, 5]
+string_slice:
+  - apple
+  - banana
+  - cherry
+int_slice: [1, 2, 3, 4, 5]
 
-[string_map]
-key1 = "value1"
-key2 = "value2"
-key3 = "value3"
+string_map:
+  key1: value1
+  key2: value2
+  key3: value3
 
-[int_map]
-count1 = 10
-count2 = 20
-count3 = 30
+int_map:
+  count1: 10
+  count2: 20
+  count3: 30
 
-[nested]
-id = 100
-tags = ["tag1", "tag2"]
+nested:
+  id: 100
+  tags: [tag1, tag2]
+  metadata:
+    author: test-author
+    version: "1.0.0"
 
-[nested.metadata]
-author = "test-author"
-version = "1.0.0"
+items:
+  - id: 1
+    tags: [item1-tag]
+    metadata:
+      type: first
+  - id: 2
+    tags: [item2-tag1, item2-tag2]
+    metadata:
+      type: second
+      priority: high
 
-[[items]]
-id = 1
-tags = ["item1-tag"]
-
-[items.metadata]
-type = "first"
-
-[[items]]
-id = 2
-tags = ["item2-tag1", "item2-tag2"]
-
-[items.metadata]
-type = "second"
-priority = "high"
-
-[configs.primary]
-id = 500
-tags = ["primary", "main"]
-
-[configs.primary.metadata]
-env = "production"
-
-[configs.secondary]
-id = 600
-tags = ["secondary", "backup"]
-
-[configs.secondary.metadata]
-env = "staging"
+configs:
+  primary:
+    id: 500
+    tags: [primary, main]
+    metadata:
+      env: production
+  secondary:
+    id: 600
+    tags: [secondary, backup]
+    metadata:
+      env: staging
 `
 	expectedResult = TestFoo{
 		Var1:     true,
@@ -189,7 +185,7 @@ env = "staging"
 )
 
 func TestConfigCreation(t *testing.T) {
-	cfg, err := Parse(TomlStringDecoder[*TestFoo], testConfigToml)
+	cfg, err := Parse(YamlStringDecoder[*TestFoo], testConfigYaml)
 	if err != nil {
 		t.Errorf("failed to create config: %v", err)
 	}
@@ -201,7 +197,7 @@ func TestConfigCreation(t *testing.T) {
 
 func TestValidateConfig(t *testing.T) {
 	t.Run("testConfig should be valid", func(t *testing.T) {
-		cfg, err := Parse(TomlStringDecoder[*TestFoo], testConfigToml)
+		cfg, err := Parse(YamlStringDecoder[*TestFoo], testConfigYaml)
 		if err != nil {
 			t.Fatalf("testConfig should parse without error: %v", err)
 		}

@@ -8,7 +8,7 @@ import (
 )
 
 type Config struct {
-	Services []Service `toml:"services"`
+	Services []Service `yaml:"services"`
 }
 
 func (c *Config) MarshalJSON() ([]byte, error) {

@@ -39,8 +39,8 @@ type protocolEntry struct {
 }
 
 type ManagerConfig struct {
-	Mail MailConfig `toml:"mail"`
-	Ntfy NtfyConfig `toml:"ntfy"`
+	Mail MailConfig `yaml:"mail"`
+	Ntfy NtfyConfig `yaml:"ntfy"`
 }
 
 func (m *ManagerConfig) ValidateFor(notifiers []string, manager *Manager) error {
