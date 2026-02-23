@@ -1,5 +1,5 @@
 {
-  description = "service-uptime-center, configure your service groups with required OK status intervals and notification systems when something doesn't go as planned.";
+  description = "service-uptime-center with NixOS module";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -16,16 +16,13 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
-        go = pkgs.go;
       in
       {
         packages.default = pkgs.buildGoModule {
           pname = "service-uptime-center";
           version = "0.1";
           src = ./.;
-
           vendorHash = "sha256-WOMuWi2exTD5KDOBLbFd/B5Qnze/snlld8eZ00eBKX0=";
-
           doCheck = true;
           checkPhase = ''
             go test ./...
@@ -38,11 +35,13 @@
             delve
             gotools
           ];
-
           shellHook = ''
-            echo "🦫 $(${go}/bin/go version) ready!"
+            echo "🦫 $(${pkgs.go}/bin/go version) ready!"
           '';
         };
       }
-    );
+    )
+    // {
+      nixosModules.default = import ./service-uptime-center.nix;
+    };
 }
