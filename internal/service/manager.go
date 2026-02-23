@@ -115,7 +115,7 @@ func (m *Manager) handleProblematicServices(notificationManager *notification.Ma
 	now := time.Now()
 	var buf bytes.Buffer
 
-	buf.WriteString("Service Name, Last Pulse, Problem Duration, Overdue")
+	buf.WriteString("Service Name, Last Pulse, Problem Duration, Overdue\n")
 	for _, service := range services {
 		service.LastProblem = now
 		problemDuration := time.Since(service.LastPulse)
