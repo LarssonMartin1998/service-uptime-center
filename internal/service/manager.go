@@ -81,14 +81,17 @@ func (m *Manager) StartMonitoring(notificationManager *notification.Manager, ins
 
 	start := time.Now()
 	go func() {
-		time.Sleep(instr.Timings.SuccessfulReportCooldown)
+		for {
+			time.Sleep(instr.Timings.SuccessfulReportCooldown)
 
-		if err := notificationManager.SendWithFallback(instr.Notifiers, notification.SendData{
-			Title: "Service Uptime Center running without any issues.",
-			Body:  "",
-		}); err != nil {
-			slog.Error("Cannot send notification, monitoring may be compromised", "error", err)
-		} else {
+			if err := notificationManager.SendWithFallback(instr.Notifiers, notification.SendData{
+				Title: "Service Uptime Center running without any issues.",
+				Body:  "",
+			}); err != nil {
+				slog.Error("Cannot send notification, monitoring may be compromised", "error", err)
+				continue
+			}
+
 			slog.Info("Service is still running", "uptime", time.Since(start).String())
 		}
 	}()
