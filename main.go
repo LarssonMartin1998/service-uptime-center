@@ -56,7 +56,17 @@ func main() {
 		os.Exit(apperror.CodeInvalidConfig)
 	}
 
-	server.SetupEndpoints(pw, managerLocator.ServiceManager)
+	allNotifiers := append(cfg.Notifiers, cfg.FallbackNotifiers...)
+	slog.Info("running startup authentication tests", "notifiers", allNotifiers)
+	authResults := managerLocator.NotificationManager.TestAuth(allNotifiers)
+	for _, r := range authResults {
+		if r.Err != nil {
+			slog.Error("startup auth test failed", "protocol", r.Protocol, "error", r.Err)
+			os.Exit(apperror.CodeAuthTestFailed)
+		}
+	}
+
+	server.SetupEndpoints(pw, managerLocator.ServiceManager, managerLocator.NotificationManager, allNotifiers)
 	managerLocator.ServiceManager.StartMonitoring(managerLocator.NotificationManager, service.MonitoringInstructions{
 		Timings: &cfg.Timings,
 		Notifiers: notification.ProtocolTargets{

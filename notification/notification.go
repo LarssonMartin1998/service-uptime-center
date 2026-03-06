@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 )
 
 var (
@@ -36,6 +37,7 @@ type Manager struct {
 type protocolEntry struct {
 	notify   NotifyProtocol
 	validate func() error
+	testAuth func() error
 }
 
 type ManagerConfig struct {
@@ -70,18 +72,60 @@ func (m *ManagerConfig) ValidateFor(notifiers []string, manager *Manager) error 
 }
 
 func NewManager(cfg *ManagerConfig) *Manager {
+	mailNotifier := newMailNotifier(&cfg.Mail)
+	ntfyNotifier := newNtfyNotifier(&cfg.Ntfy)
 	return &Manager{
 		protocols: map[string]protocolEntry{
 			"mail": {
-				notify:   newMailNotifier(&cfg.Mail),
+				notify:   mailNotifier,
 				validate: cfg.Mail.Validate,
+				testAuth: mailNotifier.testAuth,
 			},
 			"ntfy": {
-				notify:   newNtfyNotifier(&cfg.Ntfy),
+				notify:   ntfyNotifier,
 				validate: cfg.Ntfy.Validate,
+				testAuth: ntfyNotifier.testAuth,
 			},
 		},
 	}
+}
+
+type AuthTestResult struct {
+	Protocol string
+	Err      error
+}
+
+func (p *Manager) TestAuth(protocols []string) []AuthTestResult {
+	var (
+		mu      sync.Mutex
+		wg      sync.WaitGroup
+		results []AuthTestResult
+	)
+
+	for _, protocol := range protocols {
+		entry, ok := p.protocols[protocol]
+		if !ok {
+			slog.Error("auth test skipped, unknown protocol", "protocol", protocol)
+			results = append(results, AuthTestResult{Protocol: protocol, Err: ErrInvalidProtocol})
+			continue
+		}
+
+		wg.Go(func() {
+			err := entry.testAuth()
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				slog.Error("authentication test failed", "protocol", protocol, "error", err)
+			} else {
+				slog.Info("authentication test passed", "protocol", protocol)
+			}
+			results = append(results, AuthTestResult{Protocol: protocol, Err: err})
+		})
+	}
+
+	wg.Wait()
+	return results
 }
 
 func (p *Manager) Send(protocols []string, data SendData) error {

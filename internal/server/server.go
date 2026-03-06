@@ -12,6 +12,7 @@ import (
 
 	service "service-uptime-center/internal/service"
 	mw "service-uptime-center/middleware"
+	"service-uptime-center/notification"
 )
 
 func ServeAndAwaitTermination(port uint16) {
@@ -28,8 +29,8 @@ func ServeAndAwaitTermination(port uint16) {
 	server.Close()
 }
 
-func SetupEndpoints(authToken string, manager *service.Manager) {
-	if manager == nil {
+func SetupEndpoints(authToken string, serviceManager *service.Manager, notificationManager *notification.Manager, notifiers []string) {
+	if serviceManager == nil {
 		panic("manager cannot be passed as nil")
 	}
 
@@ -50,8 +51,31 @@ func SetupEndpoints(authToken string, manager *service.Manager) {
 				mw.MiddlewareMethodGet,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				fmt.Fprint(w, "OK")
+				results := notificationManager.TestAuth(notifiers)
+				healthy := true
+				authResults := make(map[string]string, len(results))
+				for _, r := range results {
+					if r.Err != nil {
+						healthy = false
+						authResults[r.Protocol] = r.Err.Error()
+					} else {
+						authResults[r.Protocol] = "ok"
+					}
+				}
+
+				status := "healthy"
+				httpStatus := http.StatusOK
+				if !healthy {
+					status = "unhealthy"
+					httpStatus = http.StatusServiceUnavailable
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(httpStatus)
+				json.NewEncoder(w).Encode(map[string]any{
+					"status":     status,
+					"auth_tests": authResults,
+				})
 			},
 		},
 		{
@@ -60,7 +84,7 @@ func SetupEndpoints(authToken string, manager *service.Manager) {
 				mw.MiddlewareMethodGet,
 			},
 			func(w http.ResponseWriter, r *http.Request) {
-				json, err := manager.GetStatusJSON()
+				json, err := serviceManager.GetStatusJSON()
 				if err != nil {
 					http.Error(w, "failed to serialize services", http.StatusInternalServerError)
 					return
@@ -86,7 +110,7 @@ func SetupEndpoints(authToken string, manager *service.Manager) {
 					return
 				}
 
-				if !manager.UpdatePulse(body.ServiceName) {
+				if !serviceManager.UpdatePulse(body.ServiceName) {
 					slog.Warn("ServiceName doesn't exist in Mapper", "endpoint", "/pulse", "body", r.Body)
 					http.Error(w, "Invalid Service Name", http.StatusBadRequest)
 					return

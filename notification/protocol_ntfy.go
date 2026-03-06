@@ -58,6 +58,34 @@ func newNtfyNotifier(cfg *NtfyConfig) *ntfyNotifier {
 	}
 }
 
+func (n *ntfyNotifier) testAuth() error {
+	server := strings.TrimRight(n.cfg.Server, "/")
+	url := fmt.Sprintf("%s/%s/json?poll=1&since=0", server, n.cfg.Topic)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create ntfy auth test request: %w", err)
+	}
+	if n.cfg.token != "" {
+		req.Header.Set("Authorization", "Bearer "+n.cfg.token)
+	}
+
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("ntfy connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("ntfy authentication failed: status %d", resp.StatusCode)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("ntfy auth test unexpected status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (n *ntfyNotifier) send(data SendData) error {
 	server := strings.TrimRight(n.cfg.Server, "/")
 	url := fmt.Sprintf("%s/%s", server, n.cfg.Topic)

@@ -17,4 +17,5 @@ var (
 	CodeInvalidConfig             = 1
 	CodeFailedReadingPasswordFile = 2
 	CodeInvalidCliArgument        = 3
+	CodeAuthTestFailed            = 4
 )

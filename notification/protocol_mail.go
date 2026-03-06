@@ -71,6 +71,17 @@ func newMailNotifier(cfg *MailConfig) *mailNotifier {
 	}
 }
 
+func (m *mailNotifier) testAuth() error {
+	smtp := &m.cfg.SMTP
+	dialer := gomail.NewDialer(smtp.Outgoing, smtp.Port, smtp.User, smtp.password)
+	closer, err := dialer.Dial()
+	if err != nil {
+		return fmt.Errorf("SMTP authentication failed: %w", err)
+	}
+	closer.Close()
+	return nil
+}
+
 func (m *mailNotifier) send(data SendData) error {
 	message := gomail.NewMessage()
 
