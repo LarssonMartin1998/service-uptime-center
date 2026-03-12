@@ -135,7 +135,7 @@ func (m *Manager) handleProblematicServices(notificationManager *notification.Ma
 
 	m.mutex.Unlock()
 
-	slog.Info("Detected problematic services", "services", services)
+	slog.Info("Detected problematic", "services", services)
 	if err := notificationManager.SendWithFallback(targets, data); err != nil {
 		slog.Error("Failed to send notification - monitoring may be compromised", "error", err)
 	}

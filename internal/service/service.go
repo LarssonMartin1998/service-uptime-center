@@ -3,6 +3,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -12,6 +13,10 @@ type Service struct {
 	LastPulse                time.Time
 	LastProblem              time.Time
 	LastSuccessReport        time.Time
+}
+
+func (s *Service) String() string {
+	return fmt.Sprintf("%s (last pulse: %s)", s.Name, s.LastPulse.Format(time.RFC3339))
 }
 
 func (s *Service) MarshalJSON() ([]byte, error) {
