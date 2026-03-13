@@ -12,6 +12,7 @@ type Service struct {
 	HeartbeatTimeoutDuration time.Duration `yaml:"heartbeat_timeout_duration"`
 	LastPulse                time.Time
 	LastProblem              time.Time
+	LastProblemReported      time.Time
 	LastSuccessReport        time.Time
 }
 
@@ -32,6 +33,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 	if !s.LastProblem.IsZero() {
 		result["last_problem"] = s.LastProblem.Format(time.RFC3339)
 	}
+	if !s.LastProblemReported.IsZero() {
+		result["last_problem_reported"] = s.LastProblemReported.Format(time.RFC3339)
+	}
 	if !s.LastSuccessReport.IsZero() {
 		result["last_success_report"] = s.LastSuccessReport.Format(time.RFC3339)
 	}
@@ -41,4 +45,8 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 
 func (s *Service) isProblematic() bool {
 	return time.Since(s.LastPulse) >= s.HeartbeatTimeoutDuration
+}
+
+func (s *Service) isProblematicReportCooldownActive(cooldownDuration time.Duration) bool {
+	return time.Since(s.LastProblemReported) < cooldownDuration
 }

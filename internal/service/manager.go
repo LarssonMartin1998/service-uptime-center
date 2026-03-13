@@ -72,7 +72,7 @@ func (m *Manager) StartMonitoring(notificationManager *notification.Manager, ins
 		for {
 			problematic := m.getProblematicServices()
 			if len(problematic) > 0 {
-				m.handleProblematicServices(notificationManager, instr.Notifiers, problematic)
+				m.handleProblematicServices(notificationManager, instr.Notifiers, problematic, instr.Timings.ProblematicReportCooldown)
 			}
 
 			time.Sleep(instr.Timings.IncidentsPollFreq)
@@ -112,30 +112,49 @@ func (m *Manager) getProblematicServices() []*Service {
 	return problematic
 }
 
-func (m *Manager) handleProblematicServices(notificationManager *notification.Manager, targets notification.ProtocolTargets, services []*Service) {
+func (m *Manager) handleProblematicServices(notificationManager *notification.Manager, targets notification.ProtocolTargets, services []*Service, problematicReportCooldown time.Duration) {
 	m.mutex.Lock()
 
 	now := time.Now()
 	var buf bytes.Buffer
 
-	buf.WriteString("Service Name, Last Pulse, Problem Duration, Overdue\n")
+	reportedCount := 0
 	for _, service := range services {
 		service.LastProblem = now
 		problemDuration := time.Since(service.LastPulse)
 		overdue := problemDuration - service.HeartbeatTimeoutDuration
-		if _, err := fmt.Fprintf(&buf, "%s, %s, %s, %s\n", service.Name, service.LastPulse.String(), problemDuration.String(), overdue.String()); err != nil {
-			slog.Error("Failed to write service data to buffer, notification will be missing this data", "service", service.Name, "error", err)
-		}
-	}
 
-	data := notification.SendData{
-		Title: fmt.Sprintf("Problem detected with '%d', services", len(services)),
-		Body:  buf.String(),
+		if service.isProblematicReportCooldownActive(problematicReportCooldown) {
+			cooldownEndTime := service.LastProblemReported.Add(problematicReportCooldown)
+			remainingCooldown := time.Until(cooldownEndTime)
+			slog.Info("Leaving out problematic service from notification because it's on report cooldown.", "service", service.Name, "remaining cooldown", remainingCooldown)
+		} else {
+			if reportedCount == 0 {
+				buf.WriteString("Service Name, Last Pulse, Problem Duration, Overdue\n")
+			}
+			reportedCount++
+			service.LastProblemReported = now
+			if _, err := fmt.Fprintf(&buf, "%s, %s, %s, %s\n", service.Name, service.LastPulse.String(), problemDuration.String(), overdue.String()); err != nil {
+				slog.Error("Failed to write service data to buffer, notification will be missing this data", "service", service.Name, "error", err)
+			}
+		}
 	}
 
 	m.mutex.Unlock()
 
 	slog.Info("Detected problematic", "services", services)
+
+	body := buf.String()
+	if reportedCount == 0 {
+		slog.Info("All problematic services are on report cooldown, skipping notification")
+		return
+	}
+
+	data := notification.SendData{
+		Title: fmt.Sprintf("Problem detected with %d services", reportedCount),
+		Body:  body,
+	}
+
 	if err := notificationManager.SendWithFallback(targets, data); err != nil {
 		slog.Error("Failed to send notification - monitoring may be compromised", "error", err)
 	}
